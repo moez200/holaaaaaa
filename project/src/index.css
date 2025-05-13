@@ -1,0 +1,69 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary: #e94c89;
+  --primary-light: #fa7eb0;
+  --primary-dark: #c9246e;
+  --secondary: #8a2be2;
+  --secondary-light: #a45deb;
+  --secondary-dark: #6a16b8;
+  --accent: #f3c1df;
+  --text-primary: #333333;
+  --text-secondary: #666666;
+  --text-light: #f8f9fa;
+  --background: #ffffff;
+  --background-light: #f8f8f8;
+}
+
+@layer base {
+  body {
+    @apply text-[--text-primary] bg-[--background] font-sans;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-medium;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-[--primary] hover:bg-[--primary-dark] text-white py-2 px-4 rounded-md transition-all duration-300 font-medium;
+  }
+  
+  .btn-secondary {
+    @apply bg-[--secondary] hover:bg-[--secondary-dark] text-white py-2 px-4 rounded-md transition-all duration-300 font-medium;
+  }
+  
+  .btn-outline {
+    @apply border border-[--primary] text-[--primary] hover:bg-[--primary] hover:text-white py-2 px-4 rounded-md transition-all duration-300 font-medium;
+  }
+
+  .card {
+    @apply bg-white rounded-lg shadow-md overflow-hidden transition-all duration-300 hover:shadow-lg;
+  }
+  
+  .input {
+    @apply w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[--primary-light];
+  }
+}
+
+/* Custom animations */
+.fade-in {
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.slide-up {
+  animation: slideUp 0.5s ease-in-out;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
