@@ -1,9 +1,12 @@
 # boutique/models.py
+from datetime import timedelta, timezone
 from django.db import models
 from django.core.validators import validate_email
 from django.utils.translation import gettext_lazy as _
 
 from django.db import models
+
+
 
 
 
@@ -108,9 +111,19 @@ class Produit(models.Model):
         related_name='produits',
         verbose_name=_("Boutique")
     )
-    note = models.FloatField(blank=True, null=True, verbose_name=_("Note"))  # For rating
+    average_rating = models.FloatField(
+        default=0.0, editable=False, verbose_name=_("Note moyenne")
+    )  # Average rating, replaces 'note'
+    marchand = models.ForeignKey(
+    'users.Marchand',
+    null=True,
+    on_delete=models.CASCADE,
+    related_name='produits',
+    verbose_name=_("Marchand")
+)
+
     en_stock = models.BooleanField(default=True, verbose_name=_("En stock"))  # For inStock
-    est_nouveau = models.BooleanField(default=False, verbose_name=_("Est nouveau"))  # For isNew
+    est_nouveau = models.BooleanField(default=True, verbose_name=_("Est nouveau"))
     est_mis_en_avant = models.BooleanField(default=False, verbose_name=_("Est mis en avant"))  # For isFeatured
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -122,7 +135,49 @@ class Produit(models.Model):
 
     def __str__(self):
         return self.nom
-     
+
+    def calculate_average_rating(self):
+        """Calculate the average rating from all associated ratings."""
+        ratings = self.ratings.all()
+        if ratings:
+            average = sum(rating.value for rating in ratings) / ratings.count()
+            self.average_rating = round(average, 1)
+            self.save(update_fields=['average_rating'])
+        else:
+            self.average_rating = 0.0
+            self.save(update_fields=['average_rating'])
+        return self.average_rating
+    @property
+    def is_new(self):
+        """Vérifie si le produit est nouveau (moins de 30 jours depuis la création)."""
+        return self.created_at >= timezone.now() - timedelta(days=2)
+
+class Rating(models.Model):
+    produit = models.ForeignKey(
+        Produit, on_delete=models.CASCADE, related_name='ratings', verbose_name=_("Produit")
+    )
+    user = models.ForeignKey(
+        'users.User', on_delete=models.CASCADE, related_name='ratings', verbose_name=_("Utilisateur")
+    )
+    value = models.PositiveIntegerField(
+        choices=[(i, i) for i in range(1, 6)], verbose_name=_("Note")
+    )  # Rating from 1 to 5
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("Note")
+        verbose_name_plural = _("Notes")
+        db_table = 'ratings'
+        unique_together = ('produit', 'user')  # One rating per user per product
+
+    def __str__(self):
+        return f"{self.user.username}: {self.value} pour {self.produit.nom}"
+
+    def save(self, *args, **kwargs):
+        """Override save to update product's average rating."""
+        super().save(*args, **kwargs)
+        self.produit.calculate_average_rating()
 class Echange(models.Model):
     boutique = models.ForeignKey(Boutique, on_delete=models.CASCADE, related_name='echanges')
     utilisateur = models.ForeignKey('users.User', on_delete=models.CASCADE, related_name='echanges')

@@ -30,111 +30,103 @@ export const useAuthStore = create<AuthState>()(
       loading: false,
       initialized: false,
 
-      setTokens: ({ user, access_token, refresh_token }) => {
+      setTokens: (data: { user: User; access_token: string; refresh_token: string }) => {
         set({
-          user,
-          accessToken: access_token,
-          refreshToken: refresh_token,
+          user: data.user,
+          accessToken: data.access_token,
+          refreshToken: data.refresh_token,
           isAuthenticated: true,
-          initialized: true,
         });
-        localStorage.setItem('accessToken', access_token);
-        localStorage.setItem('refreshToken', refresh_token);
+        localStorage.setItem('accessToken', data.access_token);
+        localStorage.setItem('refreshToken', data.refresh_token);
       },
 
       logout: () => {
+        get().clearPersistedData();
+      },
+
+      setBoutiqueId: (id: number) => {
+        set({ boutiqueId: id });
+      },
+
+      initializeAuth: async () => {
+        // D'abord, réinitialiser l'état à déconnecté
         set({
           user: null,
           accessToken: null,
           refreshToken: null,
           isAuthenticated: false,
           boutiqueId: null,
-          initialized: true,
+          loading: true,
+          initialized: false,
         });
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-      },
 
-      setBoutiqueId: (id) => set({ boutiqueId: id }),
-
-      initializeAuth: async () => {
-        if (get().initialized || get().loading) return;
-
-        set({ loading: true });
-
+        // Ensuite, vérifier si des tokens existent
         const accessToken = localStorage.getItem('accessToken');
         const refreshToken = localStorage.getItem('refreshToken');
 
         if (!accessToken || !refreshToken) {
-          get().clearPersistedData();
           set({ loading: false, initialized: true });
           return;
         }
 
         try {
-          // Validate access token by making a request to a protected endpoint
+          // Validation stricte avec le serveur
           const response = await axios.get('http://localhost:8000/users/me/', {
             headers: { Authorization: `Bearer ${accessToken}` },
+            validateStatus: (status) => status === 200
           });
+
           const user = response.data;
+
+          if (!user?.id) {
+            throw new Error('Invalid user data');
+          }
+
           set({
             user,
             accessToken,
             refreshToken,
             isAuthenticated: true,
-            boutiqueId: null,
             loading: false,
             initialized: true,
           });
         } catch (error) {
-          console.error('Token validation failed:', error);
-          try {
-            // Attempt to refresh token
-            const response = await axios.post('http://localhost:8000/token/refresh/', {
-              refresh: refreshToken,
-            });
-            const { access_token, refresh_token } = response.data;
-            const userResponse = await axios.get('http://localhost:8000/users/me/', {
-              headers: { Authorization: `Bearer ${access_token}` },
-            });
-            set({
-              user: userResponse.data,
-              accessToken: access_token,
-              refreshToken: refresh_token || refreshToken,
-              isAuthenticated: true,
-              boutiqueId: null,
-              loading: false,
-              initialized: true,
-            });
-        
-          } catch (refreshError) {
-            console.error('Refresh token failed:', refreshError);
-            get().clearPersistedData();
-            set({ loading: false, initialized: true });
-          }
+          console.error('Authentication check failed:', error);
+          // Nettoyer complètement en cas d'échec
+          get().clearPersistedData();
+          set({ loading: false, initialized: true });
         }
       },
 
       clearPersistedData: () => {
+        // Nettoyage plus complet
         localStorage.removeItem('auth-storage');
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
+        sessionStorage.removeItem('auth-storage');
+        sessionStorage.removeItem('accessToken');
+        sessionStorage.removeItem('refreshToken');
+        
         set({
           user: null,
           accessToken: null,
           refreshToken: null,
           isAuthenticated: false,
           boutiqueId: null,
+          initialized: true,
+          loading: false,
         });
       },
     }),
     {
-     name: 'auth-storage',
-      storage: createJSONStorage(() => localStorage),
+      name: 'auth-storage',
+      // Utilisation de sessionStorage pour une persistance limitée
+      storage: createJSONStorage(() => sessionStorage),
       partialize: (state) => ({
         user: state.user,
-        accessToken: state.accessToken, // Add accessToken
-        refreshToken: state.refreshToken, // Add refreshToken
+        accessToken: state.accessToken,
+        refreshToken: state.refreshToken,
         boutiqueId: state.boutiqueId,
         isAuthenticated: state.isAuthenticated,
         initialized: state.initialized,

@@ -98,11 +98,11 @@ const ProductDetailPage = () => {
       <Toaster position="top-right" />
       <h1 className="text-3xl font-bold mb-8">{product.nom}</h1>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <img
-          src={product.image ? `${API_URL}${product.image}` : 'https://via.placeholder.com/300'}
-          alt={product.nom}
-          className="w-full h-auto object-cover rounded-lg"
-        />
+      <img
+  src={product.image ? product.image : 'https://via.placeholder.com/300'}
+  alt={product.name}
+  className="w-full h-auto object-cover rounded-lg"
+/>
         <div>
           <p className="text-gray-600 mb-4">{product.description || 'Aucune description disponible'}</p>
           <p className="text-2xl font-semibold mb-4">{displayPrice} €</p>

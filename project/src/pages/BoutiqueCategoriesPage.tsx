@@ -1,16 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getBoutiqueDetails, getBoutiqueProductsByCategory } from '../services/boutiqueService';
-import { CategoryProduit, Boutique, Product } from '../types';
+import { CategoryProduit, Boutique, product } from '../types';
 import ProductCard from '../components/ui/ProductCard';
-import { ArrowLeft, X } from 'lucide-react';
+import { ArrowLeft, X, MessageSquare } from 'lucide-react';
 
 const BoutiqueCategoriesPage = () => {
   const { boutiqueId } = useParams<{ boutiqueId: string }>();
   const [categories, setCategories] = useState<CategoryProduit[]>([]);
   const [boutique, setBoutique] = useState<Boutique | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<CategoryProduit | null>(null);
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isProductsLoading, setIsProductsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,26 +44,24 @@ const BoutiqueCategoriesPage = () => {
         throw new Error('Invalid boutique ID');
       }
       const productData = await getBoutiqueProductsByCategory(boutiqueId, category.id.toString());
-      // Map Produit to Product
-      const mappedProducts: Product[] = productData.map((produit: any) => ({
+      const mappedProducts: product[] = productData.map((produit: any) => ({
         id: produit.id,
-        name: produit.nom,
-        description: produit.description,
-        price: parseFloat(produit.prix),
-        discountedPrice: produit.prix_reduit ? parseFloat(produit.prix_reduit) : undefined,
+        nom: produit.nom, // Changé de 'name' à 'nom'
+        prix: parseFloat(produit.prix), // Changé de 'price' à 'prix'
         stock: produit.stock,
-        images: produit.image ? [produit.image] : ['https://via.placeholder.com/300'],
-        couleur: produit.couleur,
-        taille: produit.taille,
-        category: produit.category_produit_details?.nom || 'Unknown',
-        vendor: {
+        image: produit.image || undefined, // Changé de 'images' à 'image'
+        couleur: produit.couleur || undefined,
+        taille: produit.taille || undefined,
+        marchand: {
           id: produit.boutique,
-          name: produit.boutique_details?.nom || boutique?.nom || 'Inconnu',
+          name: produit.boutique_details?.nom || boutique?.nom || 'Inconnu'
         },
-        rating: produit.note || 0,
-        inStock: produit.en_stock,
-        isNew: produit.est_nouveau,
-        isFeatured: produit.est_mis_en_avant,
+        average_rating: produit.average_rating || 0, // Changé de 'rating' à 'average_rating'
+        en_stock: produit.en_stock, // Changé de 'inStock' à 'en_stock'
+        est_nouveau: produit.est_nouveau, // Changé de 'isNew' à 'est_nouveau'
+        est_mis_en_avant: produit.est_mis_en_avant, // Changé de 'isFeatured' à 'est_mis_en_avant'
+        created_at: produit.created_at || new Date().toISOString(),
+        updated_at: produit.updated_at || new Date().toISOString()
       }));
       setProducts(mappedProducts);
     } catch (err: any) {
@@ -108,9 +106,18 @@ const BoutiqueCategoriesPage = () => {
               <p className="text-gray-600 mb-8">
                 {boutique?.description || 'Découvrez notre sélection exclusive de produits.'}
               </p>
-              <button className="bg-black text-white px-8 py-3 uppercase text-sm tracking-wider hover:bg-gray-800 transition-colors">
-                SHOP NOW
-              </button>
+              <div className="flex items-center space-x-4">
+                <button className="bg-black text-white px-8 py-3 uppercase text-sm tracking-wider hover:bg-gray-800 transition-colors">
+                  SHOP NOW
+                </button>
+                <Link
+                  to={`/boutique/${boutiqueId}/messages`}
+                  className="p-3 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors transform hover:scale-105"
+                  title="Contacter le marchand"
+                >
+                  <MessageSquare size={24} className="text-gray-800" />
+                </Link>
+              </div>
             </div>
           </div>
           <div

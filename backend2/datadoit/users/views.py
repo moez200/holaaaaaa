@@ -1,12 +1,19 @@
 import json
 import logging
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+from django.contrib.auth import get_user_model
+from .models import Comment
+from django.core.mail import send_mail
+from django.core.cache import cache
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework import status
 from datadoit import settings
 from users.authentication import JWTBearerAuthentication
 from users.serializers import LoginSerializer, UserSerializer, SignupSerializer, UserUpdateSerializer
-from users.models import Client, User
+from users.models import Client, Comment, Marchand, User
 from django.core.files.storage import default_storage
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.core.exceptions import PermissionDenied
@@ -17,6 +24,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from .serializers import LoginSerializer, UserSerializer
 from .authentication import JWTBearerAuthentication
+from django.db.models import Count, Avg
 from rest_framework.permissions import IsAdminUser
 logger = logging.getLogger(__name__)
 @api_view(['POST'])
@@ -137,6 +145,24 @@ def approve_user(request, user_id):
     
     user.is_approved = True
     user.save()
+    
+    # Send approval email
+    subject = 'Votre compte a été approuvé'
+    message = f'Bonjour  {user.nom},\n\nVotre compte a été approuvé avec succès. Vous pouvez maintenant accéder à toutes les fonctionnalités de notre plateforme.\n\nCordialement,\nL\'équipe'
+    from_email = 'moezhchaichai2728@gmail.com'  # Should match DEFAULT_FROM_EMAIL
+    recipient_list = [user.email]
+    
+    try:
+        send_mail(
+            subject,
+            message,
+            from_email,
+            recipient_list,
+            fail_silently=False,
+        )
+    except Exception as e:
+        return Response({'detail': f'Erreur lors de l\'envoi de l\'email: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
     return Response({'detail': 'Utilisateur approuvé avec succès.'}, status=status.HTTP_200_OK)
 
 @api_view(['POST'])
@@ -148,6 +174,24 @@ def refuse_user(request, user_id):
     
     user.is_approved = False
     user.save()
+    
+    # Send rejection email
+    subject = 'Mise à jour du statut de votre compte'
+    message = f'Bonjour {user.nom},\n\nNous sommes désolés de vous informer que votre demande d\'approbation a été refusée. Pour plus d\'informations, veuillez nous contacter.\n\nCordialement,\nL\'équipe'
+    from_email = 'moezhchaichai2728@gmail.com'  # Should match DEFAULT_FROM_EMAIL
+    recipient_list = [user.email]
+    
+    try:
+        send_mail(
+            subject,
+            message,
+            from_email,
+            recipient_list,
+            fail_silently=False,
+        )
+    except Exception as e:
+        return Response({'detail': f'Erreur lors de l\'envoi de l\'email: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
     return Response({'detail': 'Utilisateur refusé avec succès.'}, status=status.HTTP_200_OK)
 
 @api_view(['PUT'])
@@ -217,3 +261,86 @@ def get_purchase_history(request):
         return Response({'message': 'Erreur de format dans l\'historique des achats.'}, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
         return Response({'message': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+from django.db.models import Count, Avg
+from django.conf import settings
+from users.models import Marchand
+
+@api_view(['GET'])
+def top_marchand(request):
+    try:
+        # Annoter chaque marchand avec nb de produits et moyenne des notes
+        marchands = Marchand.objects.annotate(
+            product_count=Count('produits'),
+            avg_rating=Avg('produits__average_rating')
+        ).filter(product_count__gt=0)  # Ignorer ceux sans produits
+
+        if not marchands.exists():
+            return Response({'message': 'Aucun marchand avec des produits trouvé'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Choisir le marchand avec le plus de produits et la meilleure note
+        top_marchand = max(
+            marchands,
+            key=lambda m: (m.product_count, m.avg_rating or 0.0)
+        )
+
+        # Récupérer la première boutique associée
+        boutique = top_marchand.boutiques.first()
+        if not boutique:
+            return Response({'message': 'Aucune boutique associée au marchand'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Construire la réponse
+        data = {
+            'id': str(top_marchand.user_id),
+            'name': top_marchand.marchand_name,
+            'logo': request.build_absolute_uri(boutique.logo.url) if boutique.logo else None,
+            'description': boutique.description or '',
+            'average_rating': top_marchand.avg_rating,
+            'products_count': top_marchand.product_count,
+            'est_nouveau': top_marchand.est_nouveau,
+        }
+
+        return Response(data, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+
+@api_view(['GET', 'POST'])
+def comment_list(request):
+    if request.method == 'GET':
+        try:
+            user_id = request.query_params.get('user_id')
+            comments = Comment.objects.select_related('user')
+
+            if user_id:
+                # Si user_id est fourni, retourner les commentaires de cet utilisateur
+                comments = comments.filter(user_id=user_id)
+                data = [{
+                    'id': str(comment.id),
+                    'user_id': str(comment.user_id),
+                    'user_name': f"{comment.user.prenom} {comment.user.nom}",
+                    'avatar': request.build_absolute_uri(comment.user.avatar.url) if comment.user.avatar else 'https://via.placeholder.com/150',
+                    'content': comment.content,
+                    'created_at': comment.created_at.isoformat(),
+                } for comment in comments]
+                return Response(data, status=status.HTTP_200_OK)
+
+            # Si pas de user_id, retourner les 4 commentaires les plus récents
+            comments = comments.order_by('-created_at')[:4]
+            data = [{
+                'id': str(comment.id),
+                'user_id': str(comment.user_id),
+                'user_name': f"{comment.user.prenom} {comment.user.nom}",
+                'avatar': request.build_absolute_uri(comment.user.avatar.url) if comment.user.avatar else 'https://via.placeholder.com/150',
+                'content': comment.content,
+                'created_at': comment.created_at.isoformat(),
+            } for comment in comments]
+            return Response(data, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

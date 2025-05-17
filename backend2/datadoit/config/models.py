@@ -107,7 +107,7 @@ class Notification(models.Model):
     )
     is_read = models.BooleanField(default=False)
     date = models.DateTimeField(auto_now_add=True)
-    client = models.ForeignKey('users.Client', on_delete=models.CASCADE, blank=True, null=True, related_name='notifications')  # Updated reference
+    client = models.ForeignKey('users.Client', on_delete=models.CASCADE, blank=True, null=True, related_name='config_notifications')  # Updated reference
 
     class Meta:
         db_table = 'notifications'

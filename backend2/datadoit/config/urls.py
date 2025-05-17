@@ -23,7 +23,8 @@ urlpatterns = [
 
     # Notifications
     path('notifications/', notification_list_create, name='notification-list-create'),
-    path('notifications/<int:pk>/', notification_detail, name='notification-detail'),
-    path('notifications/<uuid:pk>/read/', mark_notification_as_read, name='notification-mark-read'),
+   path('notifications/<uuid:pk>/', notification_detail, name='notification-detail'),
+path('notifications/<uuid:pk>/read/', mark_notification_as_read, name='notification-mark-read'),
+
     path('notifications/read-all/', mark_all_notifications_as_read, name='notification-mark-all-read'),
 ]

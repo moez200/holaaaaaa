@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { LignePanier, Order, OrderCreatePayload, Panier } from '../types';
+import { LignePanier,  OrderCreatePayload, Panier } from '../types';
 import { useAuthStore } from '../components/Store/authStore';
 import api from '../axiosInstance';
 
@@ -7,14 +7,10 @@ const API_URL = 'http://localhost:8000/';
 
 export const addToCart = async (clientId: number, produitId: number, quantite: number = 1): Promise<{ ligne_panier: LignePanier; panier: Panier }> => {
   try {
-    const response = await axios.post(
+    const response = await api.post(
       `${API_URL}cart/paniers/add/`,
       { produit_id: produitId, quantite, client_id: clientId },
-      {
-        headers: {
-          Authorization: `Bearer ${useAuthStore.getState().access_token}`,
-        },
-      }
+    
     );
     return response.data;
   } catch (error: any) {

@@ -3,7 +3,7 @@ import { useState, useRef, ChangeEvent, FormEvent } from 'react';
 import { useAuthStore } from '../components/Store/authStore';
 import { toast } from 'react-hot-toast';
 import { Camera, Loader2 } from 'lucide-react';
-import axios from 'axios';
+
 import api from '../axiosInstance';
 
 interface User {

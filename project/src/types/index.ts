@@ -67,32 +67,31 @@ export interface CategoryBoutique {
   image?: string | null;
 }
 
-export interface Product {
-
+export interface product {
   id: number;
-  name: string; // Maps to nom
-  description?: string;
-  prix: number; // Maps to prix
-  discountedPrice?: number; // Maps to prix_reduit
+  nom: string;
+  prix: number;
   stock: number;
-  image: string[]; // Backend returns single image URL, wrapped in array
+  image?: string;
   couleur?: string;
   taille?: string;
-  category: string; // Maps to category_produit.nom
-  vendor: { id: number; name: string }; // Maps to boutique, id as number
-  rating?: number; // Maps to note
-  inStock: boolean; // Maps to en_stock
-  isNew: boolean; // Maps to est_nouveau
-  isFeatured: boolean; // Maps to est_mis_en_avant
+  marchand: number | Marchand;
+  average_rating: number;
+  en_stock: boolean;
+  est_nouveau: boolean;
+  est_mis_en_avant: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Vendor {
-  id: number;
-  name: string;
-  logo: string;
-  description: string;
-  rating: number;
+  id: string;
+  name: string; // Nom du marchand
+  logo?: string; // Logo de la boutique
+  description?: string; // Description de la boutique
+  rating: number; // Note moyenne des produits
   productsCount: number;
+  est_nouveau?: boolean;
 }
 
 export interface Boutique {
@@ -173,11 +172,20 @@ export interface BoutiqueUpdatePayload {
 export interface LignePanier {
   id: number;
   panier: number;
-  produit: Product;
+  produit: product;
   quantite: number;
   created_at: string;
 }
 
+export interface Produit {
+  id: number;
+  nom: string;
+  category_name: string;
+  prix: number | null;
+  total_sold: number | null;
+  stock: number;
+  image?: string;
+}
 export interface Order {
   date: string | number | Date;
   customerName: any;
@@ -198,7 +206,7 @@ export interface Order {
 export interface OrderItem {
   id: number;
   order: number;
-  produit: Product;
+  produit: product;
   quantite: number;
   prix: string;
 

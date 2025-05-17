@@ -3,7 +3,7 @@ from django.db import models
 
 from django.utils.translation import gettext_lazy as _
 from config.models import RemiseType
-from users.models import Client
+from users.models import Client, User
 from boutique.models import Produit
 from django.db import models
 from django.utils.translation import gettext_lazy as _
@@ -158,3 +158,16 @@ class OrderItem(models.Model):
 
     def __str__(self):
         return f"{self.quantite} x {self.produit.nom} (Commande ID: {self.order.id})"
+
+class NotificationMarchand(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='cart_notifications')
+    message = models.TextField()
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, null=True)
+
+    def __str__(self):
+        return f"Notification for {self.user}: {self.message}"
+
+    class Meta:
+        ordering = ['-created_at']    

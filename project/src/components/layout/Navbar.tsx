@@ -10,16 +10,17 @@ import {
   Package,
   LogOut,
   UserCircle,
-  Mail,
   Share,
   Bell,
+  MessageSquare,
 } from 'lucide-react';
 import { useAuthStore } from '../Store/authStore';
 import { useCartStore } from '../Store/cartStore';
 import { useWishlistStore } from '../Store/usewhishliststore';
 import { notificationService } from '../../services/notificationService';
+// Import du service
 import NotificationPanel from '../../admin/pages/badges/NotificationPanel';
-
+import { commentService } from '../../services/commentaireService';
 
 const Navbar = () => {
   const { user, isAuthenticated, logout } = useAuthStore();
@@ -29,6 +30,8 @@ const Navbar = () => {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isReferralModalOpen, setIsReferralModalOpen] = useState(false);
   const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false);
+  const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
+  const [newComment, setNewComment] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [unreadCount, setUnreadCount] = useState(0);
 
@@ -49,7 +52,7 @@ const Navbar = () => {
       const fetchNotificationsCount = async () => {
         try {
           const notifications = await notificationService.getNotifications();
-          const unread = notifications.filter((n: { isRead: any; }) => !n.isRead).length;
+          const unread = notifications.filter((n: { isRead: any }) => !n.isRead).length;
           setUnreadCount(unread);
         } catch (err) {
           console.error('Failed to fetch notifications count:', err);
@@ -68,6 +71,24 @@ const Navbar = () => {
   const toggleUserMenu = () => setIsUserMenuOpen(!isUserMenuOpen);
   const toggleReferralModal = () => setIsReferralModalOpen(!isReferralModalOpen);
   const toggleNotificationPanel = () => setIsNotificationPanelOpen(!isNotificationPanelOpen);
+  const toggleCommentModal = () => {
+    setIsCommentModalOpen(!isCommentModalOpen);
+    setNewComment(''); // Réinitialiser le commentaire à chaque ouverture/fermeture
+  };
+
+  const handleAddComment = async () => {
+    if (!newComment.trim() || !user?.id) return;
+    try {
+      await commentService.addComment({
+        user_id: user.id.toString(),
+        content: newComment,
+      });
+      setNewComment('');
+      toggleCommentModal(); // Fermer le modal après l'envoi
+    } catch (err) {
+      console.error('Failed to add comment:', err);
+    }
+  };
 
   return (
     <header className="sticky top-0 z-50 bg-white shadow-sm">
@@ -121,23 +142,37 @@ const Navbar = () => {
             </Link>
 
             {isAuthenticated && (
-              <div className="relative">
-                <button
-                  onClick={toggleNotificationPanel}
-                  className="relative"
-                  aria-label="Notifications"
-                >
-                  <Bell className="h-6 w-6 hover:text-primary transition-colors" />
-                  {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-primary text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
-                      {unreadCount}
-                    </span>
+              <>
+                <div className="relative">
+                  <button
+                    onClick={toggleNotificationPanel}
+                    className="relative"
+                    aria-label="Notifications"
+                  >
+                    <Bell className="h-6 w-6 hover:text-primary transition-colors" />
+                    {unreadCount > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-primary text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
+                        {unreadCount}
+                      </span>
+                    )}
+                  </button>
+                  {isNotificationPanelOpen && (
+                    <NotificationPanel onClose={() => setIsNotificationPanelOpen(false)} />
                   )}
-                </button>
-                {isNotificationPanelOpen && (
-                  <NotificationPanel onClose={() => setIsNotificationPanelOpen(false)} />
+                </div>
+
+                {user?.role?.toLowerCase() === 'client' && (
+                  <div className="relative">
+                    <button
+                      onClick={toggleCommentModal}
+                      className="relative"
+                      aria-label="Commentaires"
+                    >
+                      <MessageSquare className="h-6 w-6 hover:text-primary transition-colors" />
+                    </button>
+                  </div>
                 )}
-              </div>
+              </>
             )}
 
             {!isAuthenticated && (
@@ -198,7 +233,6 @@ const Navbar = () => {
                         <button
                           className="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                           onClick={() => {
-                            console.log('Opening referral modal for user:', user);
                             toggleReferralModal();
                             setIsUserMenuOpen(false);
                           }}
@@ -215,17 +249,8 @@ const Navbar = () => {
                         <Package className="mr-2 h-4 w-4" />
                         Mes commandes
                       </Link>
-                      <Link
-                        to="/messages"
-                        className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                        onClick={() => setIsUserMenuOpen(false)}
-                      >
-                        <Mail className="mr-2 h-4 w-4" />
-                        Messages
-                      </Link>
                       <button
                         onClick={() => {
-                          console.log('Logging out user:', user);
                           logout();
                           setIsUserMenuOpen(false);
                         }}
@@ -277,7 +302,6 @@ const Navbar = () => {
         </div>
       </div>
 
-      {/* Navigation des catégories */}
       <nav className="bg-white border-t border-gray-200">
         {/* Ajoutez ici les catégories si nécessaire */}
       </nav>
@@ -312,23 +336,39 @@ const Navbar = () => {
               </Link>
             </li>
             {isAuthenticated && (
-              <li className="py-2">
-                <button
-                  onClick={() => {
-                    toggleNotificationPanel();
-                    setIsMenuOpen(false);
-                  }}
-                  className="flex items-center text-base font-medium hover:text-primary transition-colors"
-                >
-                  <Bell className="h-5 w-5 mr-2" />
-                  Notifications
-                  {unreadCount > 0 && (
-                    <span className="ml-2 bg-primary text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                      {unreadCount}
-                    </span>
-                  )}
-                </button>
-              </li>
+              <>
+                <li className="py-2">
+                  <button
+                    onClick={() => {
+                      toggleNotificationPanel();
+                      setIsMenuOpen(false);
+                    }}
+                    className="flex items-center text-base font-medium hover:text-primary transition-colors"
+                  >
+                    <Bell className="h-5 w-5 mr-2" />
+                    Notifications
+                    {unreadCount > 0 && (
+                      <span className="ml-2 bg-primary text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                        {unreadCount}
+                      </span>
+                    )}
+                  </button>
+                </li>
+                {user?.role?.toLowerCase() === 'client' && (
+                  <li className="py-2">
+                    <button
+                      onClick={() => {
+                        toggleCommentModal();
+                        setIsMenuOpen(false);
+                      }}
+                      className="flex items-center text-base font-medium hover:text-primary transition-colors"
+                    >
+                      <MessageSquare className="h-5 w-5 mr-2" />
+                      Commentaires
+                    </button>
+                  </li>
+                )}
+              </>
             )}
           </ul>
         </div>
@@ -352,6 +392,43 @@ const Navbar = () => {
             >
               Fermer
             </button>
+          </div>
+        </div>
+      )}
+
+      {isCommentModalOpen && user?.role?.toLowerCase() === 'client' && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Ajouter un commentaire</h2>
+              <button
+                onClick={toggleCommentModal}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <textarea
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              placeholder="Votre commentaire..."
+              className="w-full p-2 text-sm border rounded mb-4"
+              rows={4}
+            />
+            <div className="flex justify-end space-x-2">
+              <button
+                onClick={toggleCommentModal}
+                className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded hover:bg-gray-200"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleAddComment}
+                className="px-4 py-2 text-sm text-white bg-primary rounded hover:bg-primary-dark"
+              >
+                Envoyer
+              </button>
+            </div>
           </div>
         </div>
       )}

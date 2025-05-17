@@ -1,8 +1,9 @@
 import React from 'react';
-import { Product } from '../../data/mockData';
+import { Produit } from '../../types';
+
 
 interface ProductTableProps {
-  products: Product[];
+  products: Produit[];
 }
 
 const ProductTable: React.FC<ProductTableProps> = ({ products }) => {
@@ -33,30 +34,39 @@ const ProductTable: React.FC<ProductTableProps> = ({ products }) => {
             <tr key={product.id} className="hover:bg-gray-50">
               <td className="px-6 py-4 whitespace-nowrap">
                 <div className="flex items-center">
-                  <div className="h-10 w-10 flex-shrink-0 mr-3">
-                    {product.image ? (
-                      <img
-                        src={product.image}
-                        alt={product.name}
-                        className="h-10 w-10 rounded-md object-cover"
-                      />
-                    ) : (
-                      <div className="h-10 w-10 rounded-md bg-gray-200 flex items-center justify-center text-gray-500 text-xs">
-                        No image
-                      </div>
-                    )}
-                  </div>
-                  <div className="text-sm font-medium text-gray-900">{product.name}</div>
+                 <div className="h-10 w-10 flex-shrink-0 mr-3">
+  {product.image ? (
+    <img
+      src={
+        product.image.startsWith('http')
+          ? product.image
+          : `http://localhost:8000${product.image}`
+      }
+      alt={product.nom}
+      className="h-10 w-10 rounded-md object-cover"
+    />
+  ) : (
+    <div className="h-10 w-10 rounded-md bg-gray-200 flex items-center justify-center text-gray-500 text-xs">
+      No image
+    </div>
+  )}
+</div>
+
+                  <div className="text-sm font-medium text-gray-900">{product.nom}</div>
                 </div>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
-                <div className="text-sm text-gray-500">{product.category}</div>
+                <div className="text-sm text-gray-500">{product.category_name}</div>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
-                <div className="text-sm text-gray-900">{product.price.toFixed(2)} €</div>
+                <div className="text-sm text-gray-900">
+                  {product.prix !== null && product.prix !== undefined
+                    ? `${product.prix.toFixed(2)} €`
+                    : 'N/A'}
+                </div>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
-                <div className="text-sm text-gray-900">{product.sold}</div>
+                <div className="text-sm text-gray-900">{product.total_sold}</div>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${

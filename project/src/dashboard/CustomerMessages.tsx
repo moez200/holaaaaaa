@@ -3,7 +3,6 @@ import { useParams } from 'react-router-dom';
 import { MessageSquare, Search, Edit2, Trash2, Pin, Heart } from 'lucide-react';
 import { useAuthStore } from '../components/Store/authStore';
 
-// Interfaces (unchanged)
 interface ChatMessage {
   id: string;
   customerId: string;
@@ -54,13 +53,11 @@ const roleMap: Record<User['role'], 'customer' | 'merchant' | 'admin'> = {
   admin: 'admin',
 };
 
-// Utility function to compute room details (unchanged)
 const computeRoomDetails = (
   userId: string | undefined,
   userRole: User['role'] | undefined,
   boutiqueId: string | null
 ): { roomName: string; roomType: 'shop' | 'admin'; error: string | null } => {
-  console.log('computeRoomDetails called:', { userId, userRole, boutiqueId });
   if (!userId || !userRole) {
     return { roomName: '', roomType: 'shop', error: 'Utilisateur non authentifié' };
   }
@@ -70,7 +67,6 @@ const computeRoomDetails = (
   let roomType: 'shop' | 'admin' = 'shop';
 
   if (serverRole === 'merchant') {
-    roomType = 'shop';
     if (!boutiqueId) {
       return { roomName: '', roomType: 'shop', error: 'ID de boutique manquant pour le marchand' };
     }
@@ -79,7 +75,6 @@ const computeRoomDetails = (
     roomType = 'admin';
     roomName = `admin_${userId}`;
   } else if (serverRole === 'customer') {
-    roomType = 'shop';
     if (!boutiqueId) {
       return { roomName: '', roomType: 'shop', error: 'ID de boutique manquant pour le client' };
     }
@@ -92,12 +87,10 @@ const computeRoomDetails = (
 };
 
 const CustomerMessages: React.FC = () => {
-  // State
-  const { accessToken, userId, userRole } = useAuthStore((state) => ({
-    accessToken: state.accessToken,
-    userId: state.user?.id ?? '',
-    userRole: state.user?.role ?? undefined,
-  }));
+  // State management with optimized selectors
+  const accessToken = useAuthStore((state) => state.accessToken);
+  const userId = useAuthStore((state) => state.user?.id ?? '');
+  const userRole = useAuthStore((state) => state.user?.role ?? undefined);
 
   const { boutiqueId: paramBoutiqueId } = useParams<{ boutiqueId: string }>();
   const [roomName, setRoomName] = useState<string>('');
@@ -109,85 +102,88 @@ const CustomerMessages: React.FC = () => {
   const [newMessage, setNewMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<string | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
 
   const ws = useRef<WebSocket | null>(null);
   const reconnectTimeout = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 3;
+  const messageQueue = useRef<string[]>([]); // Queue for pending messages
 
-  // Stabilize boutiqueId
+  // Memoize boutiqueId to prevent unnecessary recalculations
   const boutiqueId = useMemo(() => paramBoutiqueId || null, [paramBoutiqueId]);
 
-  // Compute room details with stable dependencies
-  const roomDetails = useMemo(() => {
-    if (!userId || !userRole) {
-      return { roomName: '', roomType: 'shop' as const, error: 'Utilisateur non authentifié' };
-    }
-    return computeRoomDetails(userId, userRole, boutiqueId ? String(boutiqueId) : undefined);
+  // Stable room details calculation
+  const { roomName: computedRoomName, roomType: computedRoomType, error: computedError } = useMemo(() => {
+    return computeRoomDetails(userId, userRole, boutiqueId);
   }, [userId, userRole, boutiqueId]);
 
-  // Update room details only when necessary
+  // Update room state only when computed values change
   useEffect(() => {
-    if (!roomDetails) return;
-    setRoomName((prev) => (prev !== roomDetails.roomName ? roomDetails.roomName : prev));
-    setRoomType((prev) => (prev !== roomDetails.roomType ? roomDetails.roomType : prev));
-    setError((prev) => (prev !== roomDetails.error ? roomDetails.error : prev));
-  }, [roomDetails]);
+    setRoomName((prev) => (prev !== computedRoomName ? computedRoomName : prev));
+    setRoomType((prev) => (prev !== computedRoomType ? computedRoomType : prev));
+    setError((prev) => (prev !== computedError ? computedError : prev));
+  }, [computedRoomName, computedRoomType, computedError]);
 
-  // WebSocket connection setup
+  // Function to send or queue messages
+  const sendOrQueueMessage = useCallback((message: object) => {
+    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+      ws.current.send(JSON.stringify(message));
+    } else {
+      messageQueue.current.push(JSON.stringify(message));
+    }
+  }, []);
+
+  // Function to flush message queue
+  const flushMessageQueue = useCallback(() => {
+    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+      while (messageQueue.current.length > 0) {
+        ws.current.send(messageQueue.current.shift()!);
+      }
+    }
+  }, []);
+
+  // WebSocket connection management
   useEffect(() => {
-    if (!accessToken || !roomName || (!boutiqueId && roomType === 'shop') || (roomType === 'admin' && userRole !== 'admin')) {
-      if (!accessToken) setError('Jeton d\'authentification manquant');
-      if (!roomName) setError('Nom de salle manquant');
-      if (!boutiqueId && roomType === 'shop') setError('ID de boutique manquant');
-      if (roomType === 'admin' && userRole?.toLowerCase() !== 'admin') setError('Accès non autorisé pour les non-admins');
+    if (!computedRoomName || !accessToken || computedError) {
       return;
     }
 
     const connectWebSocket = () => {
       if (reconnectAttempts.current >= maxReconnectAttempts) {
-        setError('Échec de la connexion WebSocket après plusieurs tentatives. Veuillez réessayer plus tard.');
+        setError('Échec de la connexion après plusieurs tentatives');
+        setIsConnecting(false);
         return;
       }
 
-      const wsUrl = `ws://localhost:8000/ws/chat/${roomName}/?token=${accessToken}&role=${userRole}&boutique_id=${boutiqueId || ''}`;
+      setIsConnecting(true);
+      const wsUrl = `ws://localhost:8000/ws/chat/${computedRoomName}/?token=${accessToken}&role=${userRole}&boutique_id=${boutiqueId || ''}`;
       ws.current = new WebSocket(wsUrl);
 
       ws.current.onopen = () => {
-        setError(null);
         reconnectAttempts.current = 0;
+        setError(null);
+        setIsConnecting(false);
 
-        ws.current?.send(
-          JSON.stringify({
-            type: 'connect',
-            role: userRole,
-            boutique_id: boutiqueId,
-            user_id: userId,
-          })
-        );
+        // Send initial messages via queue
+        sendOrQueueMessage({
+          type: 'connect',
+          role: userRole,
+          boutique_id: boutiqueId,
+          user_id: userId,
+        });
 
-        if (roomType === 'shop') {
-          ws.current?.send(
-            JSON.stringify({
-              type: 'get_customers',
-              boutique_id: boutiqueId,
-            })
-          );
-        } else {
-          ws.current?.send(
-            JSON.stringify({
-              type: 'get_members',
-              boutique_id: boutiqueId,
-            })
-          );
-        }
+        sendOrQueueMessage({
+          type: roomType === 'shop' ? 'get_customers' : 'get_members',
+          boutique_id: boutiqueId,
+        });
 
-        ws.current?.send(
-          JSON.stringify({
-            type: 'get_notifications',
-            boutique_id: boutiqueId,
-          })
-        );
+        sendOrQueueMessage({
+          type: 'get_notifications',
+          boutique_id: boutiqueId,
+        });
+
+        flushMessageQueue();
       };
 
       ws.current.onmessage = (event) => {
@@ -270,178 +266,127 @@ const CustomerMessages: React.FC = () => {
             );
             break;
           case 'message_pinned':
-            break;
-          case 'message_reaction':
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === data.message_id
-                  ? {
-                      ...msg,
-                      reactions: [...(msg.reactions || []), { emoji: data.emoji, name: data.sender_name }],
-                    }
-                  : msg
-              )
-            );
-            break;
           case 'message_read':
-            break;
           case 'notification_read':
-            setNotifications((prev) =>
-              prev.map((n) => (n.id === data.notification_id ? { ...n, read: true } : n))
-            );
-            break;
           case 'all_notifications_read':
-            setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
             break;
           default:
-            console.warn('Unknown message type:', data.type);
+            console.warn(`Unhandled message type: ${data.type}`);
+            break;
         }
       };
 
       ws.current.onclose = (event) => {
+        setIsConnecting(false);
         if (event.code === 4003) {
-          setError('Accès non autorisé à la salle de chat. Vérifiez votre accès à la boutique.');
+          setError('Accès non autorisé à la salle de chat');
           return;
         }
-        setError(`Connexion WebSocket interrompue: ${event.reason || 'Raison inconnue'}`);
-        reconnectAttempts.current += 1;
-        if (reconnectAttempts.current < maxReconnectAttempts) {
+        if (event.code !== 1000) {
+          setError(`Connexion interrompue: ${event.reason || 'Raison inconnue'}`);
+          reconnectAttempts.current += 1;
           reconnectTimeout.current = setTimeout(connectWebSocket, 5000);
         }
       };
 
       ws.current.onerror = () => {
-        setError('Une erreur WebSocket s\'est produite. Veuillez réessayer.');
+        setIsConnecting(false);
+        setError('Erreur de connexion WebSocket');
       };
     };
 
     connectWebSocket();
 
     return () => {
-      if (ws.current) {
-        ws.current.close();
-        ws.current = null;
+      if (ws.current?.readyState === WebSocket.OPEN) {
+        ws.current.close(1000, 'Component unmount');
       }
       if (reconnectTimeout.current) {
         clearTimeout(reconnectTimeout.current);
-        reconnectTimeout.current = null;
       }
+      messageQueue.current = [];
+      setIsConnecting(false);
     };
-  }, [accessToken, roomName, roomType, boutiqueId, userRole, userId]);
+  }, [computedRoomName, accessToken, userRole, boutiqueId, computedError, roomType, userId, selectedCustomer, sendOrQueueMessage, flushMessageQueue]);
 
-  // Message and notification handlers (unchanged)
-  const handleSendMessage = useCallback(
-    (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!newMessage.trim() || !ws.current || ws.current.readyState !== WebSocket.OPEN) return;
+  const handleSendMessage = useCallback((e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMessage.trim() || !ws.current) return;
 
-      ws.current.send(
-        JSON.stringify({
-          type: 'chat_message',
-          message: newMessage,
-          customer_id: roomType === 'shop' ? selectedCustomer : undefined,
-          boutique_id: boutiqueId,
-          reply_to: null,
-        })
-      );
-      setNewMessage('');
-    },
-    [newMessage, roomType, selectedCustomer, boutiqueId]
-  );
+    sendOrQueueMessage({
+      type: 'chat_message',
+      message: newMessage,
+      customer_id: roomType === 'shop' ? selectedCustomer : undefined,
+      boutique_id: boutiqueId,
+      reply_to: null,
+    });
+    setNewMessage('');
+  }, [newMessage, roomType, selectedCustomer, boutiqueId, sendOrQueueMessage]);
 
-  const handleOfferReward = useCallback(
-    (customerId: string) => {
-      if (!ws.current || ws.current.readyState !== WebSocket.OPEN || roomType !== 'shop') return;
+  const handleOfferReward = useCallback((customerId: string) => {
+    if (!ws.current || roomType !== 'shop') return;
 
-      ws.current.send(
-        JSON.stringify({
-          type: 'chat_message',
-          message:
-            'Pour vous remercier de votre paiement rapide, nous vous offrons une remise de 10% sur votre prochaine commande ! Code promo : EARLY10',
-          customer_id: customerId,
-          reply_to: null,
-        })
-      );
-    },
-    [roomType]
-  );
+    sendOrQueueMessage({
+      type: 'chat_message',
+      message: 'Pour vous remercier de votre paiement rapide, nous vous offrons une remise de 10% sur votre prochaine commande ! Code promo : EARLY10',
+      customer_id: customerId,
+      boutique_id: boutiqueId,
+      reply_to: null,
+    });
+  }, [roomType, boutiqueId, sendOrQueueMessage]);
 
   const handleEditMessage = useCallback((messageId: string, newText: string) => {
-    if (!ws.current || ws.current.readyState !== WebSocket.OPEN || !newText) return;
-    ws.current.send(
-      JSON.stringify({
-        type: 'edit_message',
-        message_id: messageId,
-        new_text: newText,
-      })
-    );
-  }, []);
+    if (!ws.current || !newText) return;
+    sendOrQueueMessage({
+      type: 'edit_message',
+      message_id: messageId,
+      new_text: newText,
+    });
+  }, [sendOrQueueMessage]);
 
   const handleDeleteMessage = useCallback((messageId: string) => {
-    if (!ws.current || ws.current.readyState !== WebSocket.OPEN) return;
-    ws.current.send(
-      JSON.stringify({
-        type: 'delete_message',
-        message_id: messageId,
-      })
-    );
-  }, []);
+    if (!ws.current) return;
+    sendOrQueueMessage({
+      type: 'delete_message',
+      message_id: messageId,
+    });
+  }, [sendOrQueueMessage]);
 
   const handlePinMessage = useCallback((messageId: string) => {
-    if (!ws.current || ws.current.readyState !== WebSocket.OPEN) return;
-    ws.current.send(
-      JSON.stringify({
-        type: 'pin_message',
-        message_id: messageId,
-      })
-    );
-  }, []);
+    if (!ws.current) return;
+    sendOrQueueMessage({
+      type: 'pin_message',
+      message_id: messageId,
+    });
+  }, [sendOrQueueMessage]);
 
   const handleReactToMessage = useCallback((messageId: string, emoji: string) => {
-    if (!ws.current || ws.current.readyState !== WebSocket.OPEN) return;
-    ws.current.send(
-      JSON.stringify({
-        type: 'react_to_message',
-        message_id: messageId,
-        emoji,
-      })
-    );
-  }, []);
-
-  const handleMarkMessageAsRead = useCallback((messageId: string) => {
-    if (!ws.current || ws.current.readyState !== WebSocket.OPEN) return;
-    ws.current.send(
-      JSON.stringify({
-        type: 'mark_as_read',
-        message_id: messageId,
-      })
-    );
-  }, []);
+    if (!ws.current) return;
+    sendOrQueueMessage({
+      type: 'react_to_message',
+      message_id: messageId,
+      emoji,
+    });
+  }, [sendOrQueueMessage]);
 
   const handleMarkNotificationAsRead = useCallback((notificationId: string) => {
-    if (!ws.current || ws.current.readyState !== WebSocket.OPEN) return;
-    ws.current.send(
-      JSON.stringify({
-        type: 'mark_notification_as_read',
-        notification_id: notificationId,
-      })
-    );
-  }, []);
+    if (!ws.current) return;
+    sendOrQueueMessage({
+      type: 'mark_notification_as_read',
+      notification_id: notificationId,
+    });
+  }, [sendOrQueueMessage]);
 
   const handleMarkAllNotificationsAsRead = useCallback(() => {
-    if (!ws.current || ws.current.readyState !== WebSocket.OPEN) return;
-    ws.current.send(JSON.stringify({ type: 'mark_all_notifications_as_read' }));
-  }, []);
+    if (!ws.current) return;
+    sendOrQueueMessage({ type: 'mark_all_notifications_as_read' });
+  }, [sendOrQueueMessage]);
 
-  const handleCustomerSelect = useCallback(
-    (customerId: string) => {
-      console.log('Setting selectedCustomer:', { customerId, roomType });
-      setSelectedCustomer(roomType === 'shop' ? customerId : null);
-    },
-    [roomType]
-  );
+  const handleCustomerSelect = useCallback((customerId: string) => {
+    setSelectedCustomer(roomType === 'shop' ? customerId : null);
+  }, [roomType]);
 
-  // Memoized computed values (unchanged)
+  // Memoized derived data
   const customerMessages = useMemo(() => {
     return roomType === 'shop' && selectedCustomer
       ? messages.filter((msg) => msg.customerId === selectedCustomer)
@@ -451,11 +396,11 @@ const CustomerMessages: React.FC = () => {
   const filteredMembers = useMemo(() => {
     return members.filter(
       (member) =>
-        member.name.toLowerCase().includes(searchQuery.toLowerCase()) || member.id.includes(searchQuery)
+        member.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+        member.id.includes(searchQuery)
     );
   }, [members, searchQuery]);
 
-  // Render (unchanged)
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -467,6 +412,7 @@ const CustomerMessages: React.FC = () => {
           {roomType === 'shop' ? 'Gérez vos conversations avec les clients' : 'Discussions administratives'}
         </p>
         {error && <p className="text-red-500">{error}</p>}
+        {isConnecting && <p className="text-blue-500">Connexion en cours...</p>}
       </div>
 
       {/* Main Content */}
@@ -542,7 +488,6 @@ const CustomerMessages: React.FC = () => {
                   <div
                     key={msg.id}
                     className={`flex ${msg.isFromMerchant ? 'justify-end' : 'justify-start'}`}
-                    onClick={() => handleMarkMessageAsRead(msg.id)}
                   >
                     <div
                       className={`relative max-w-xs px-4 py-2 rounded-lg md:max-w-md ${

@@ -1,5 +1,5 @@
 import axios, { AxiosResponse } from 'axios';
-import { User, UserAdmin } from '../types';
+import { User,  Vendor } from '../types';
 import api from '../axiosInstance';
 
 
@@ -28,9 +28,9 @@ export class UserService {
   
 
   // Récupérer un utilisateur par ID
-  static async getUserById(id: number): Promise<UserAdmin> {
+  static async getUserById(id: number): Promise<User> {
     try {
-      const response: AxiosResponse<UserAdmin> = await api.get(`/users/list/`);
+      const response: AxiosResponse<User> = await api.get(`/users/list/`);
       return response.data;
     } catch (error) {
       console.error(`Erreur lors de la récupération de l'utilisateur ${id}:`, error);
@@ -39,9 +39,9 @@ export class UserService {
   }
 
   // Créer un nouvel utilisateur
-  static async createUser(userData: Partial<UserAdmin>): Promise<UserAdmin> {
+  static async createUser(userData: Partial<User>): Promise<User> {
     try {
-      const response: AxiosResponse<UserAdmin> = await api.post(`/users/list/`, userData);
+      const response: AxiosResponse<User> = await api.post(`/users/list/`, userData);
       return response.data;
     } catch (error) {
       console.error('Erreur lors de la création de l\'utilisateur:', error);
@@ -50,9 +50,9 @@ export class UserService {
   }
 
   // Mettre à jour un utilisateur
-  static async updateUser(id: number, userData: Partial<UserAdmin>): Promise<UserAdmin> {
+  static async updateUser(id: number, userData: Partial<User>): Promise<User> {
     try {
-      const response: AxiosResponse<UserAdmin> = await api.put(`/users/updat/${id}`, userData);
+      const response: AxiosResponse<User> = await api.put(`/users/updat/${id}`, userData);
       return response.data;
     } catch (error) {
       console.error(`Erreur lors de la mise à jour de l'utilisateur ${id}:`, error);
@@ -71,13 +71,13 @@ export class UserService {
   }
 
   // Approuver un utilisateur
-  static async approveUser(id: number): Promise<UserAdmin> {
+  static async approveUser(id: number): Promise<User> {
     try {
-      const response: AxiosResponse<UserAdmin> = await api.post(`/users/approve/${id}`, {
+      const response: AxiosResponse<User> = await api.post(`/users/approve/${id}`, {
         is_approved: true,
       });
      
-      return response.data as UserAdmin;
+      return response.data as User;
     } catch (error) {
       console.error(`Erreur lors de l'approbation de l'utilisateur ${id}:`, error);
       throw error;
@@ -85,9 +85,9 @@ export class UserService {
   }
 
   // Rejeter un utilisateur
-  static async rejectUser(id: number): Promise<UserAdmin> {
+  static async rejectUser(id: number): Promise<User> {
     try {
-      const response: AxiosResponse<UserAdmin> = await api.post(`/users/refuse/${id}`, {
+      const response: AxiosResponse<User> = await api.post(`/users/refuse/${id}`, {
         is_approved: false,
       });
       return response.data;
@@ -97,3 +97,23 @@ export class UserService {
     }
   }
 }
+
+
+export const getTopMarchand = async (): Promise<Vendor> => {
+  try {
+    const response = await axios.get('http://localhost:8000/users/top-marchand/');
+    const vendor = response.data;
+    return {
+      id: vendor.id,
+      name: vendor.name, // Nom du marchand
+      logo: vendor.logo || 'https://via.placeholder.com/150',
+      description: vendor.description || '',
+      rating: vendor.average_rating || 0,
+      productsCount: vendor.products_count || 0,
+      est_nouveau: vendor.est_nouveau || false,
+    };
+  } catch (error) {
+    console.error('Error fetching top marchand:', error);
+    throw error;
+  }
+};

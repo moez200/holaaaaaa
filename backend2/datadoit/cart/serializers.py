@@ -1,6 +1,7 @@
+from django.conf import settings
 from rest_framework import serializers
 from boutique.models import Boutique, CategoryProduit, Produit
-from cart.models import LignePanier, Order, OrderItem, Panier
+from cart.models import LignePanier, NotificationMarchand, Order, OrderItem, Panier
 from users.models import Client, User
 import logging
 
@@ -40,21 +41,31 @@ class ProduitSerializerCart(serializers.ModelSerializer):
         fields = [
             'id', 'nom', 'description', 'prix', 'prix_reduit', 'stock', 'image', 'couleur', 'taille',
             'category_produit', 'category_produit_details', 'boutique', 'boutique_details',
-            'note', 'en_stock', 'est_nouveau', 'est_mis_en_avant', 'created_at', 'updated_at'
+            'average_rating', 'en_stock', 'est_nouveau', 'est_mis_en_avant', 'created_at', 'updated_at'
         ]
 
     def get_image(self, obj):
         if not obj.image:
             logger.debug(f"Produit {obj.nom} (id: {obj.id}) has no image")
             return None
+        
         request = self.context.get('request')
-        try:
-            image_url = request.build_absolute_uri(obj.image.url) if request else obj.image.url
-            logger.debug(f"Produit {obj.nom} (id: {obj.id}) image URL: {image_url}")
-            return image_url
-        except Exception as e:
-            logger.error(f"Error generating image URL for Produit {obj.nom} (id: {obj.id}): {str(e)}")
-            return None
+        if request:
+            try:
+                # Generate full URL using request (e.g., http://localhost:8000/media/...)
+                image_url = request.build_absolute_uri(obj.image.url)
+                logger.debug(f"Produit {obj.nom} (id: {obj.id}) image URL: {image_url}")
+                return image_url
+            except Exception as e:
+                logger.error(f"Error generating image URL for Produit {obj.nom} (id: {obj.id}): {str(e)}")
+                return None
+        else:
+            # Fallback for local development if request is unavailable
+            # Use settings.MEDIA_URL to construct a localhost URL
+            image_url = f"{settings.MEDIA_URL}{obj.image.name}"
+            full_url = f"http://localhost:8000{image_url}"
+            logger.debug(f"Produit {obj.nom} (id: {obj.id}) fallback image URL: {full_url}")
+            return full_url
 
 class ReadProduitSerializer(serializers.ModelSerializer):
     boutique_details = BoutiqueSerializerCart(source='boutique', read_only=True)
@@ -205,3 +216,45 @@ class OrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
         fields = ['id', 'client', 'first_name', 'last_name', 'email', 'telephone', 'adresse', 'total', 'created_at', 'updated_at', 'items', 'status']
+
+
+class StatsSerializer(serializers.Serializer):
+    total_users = serializers.CharField()
+    active_merchants = serializers.CharField()
+    total_revenue = serializers.CharField()
+    tickets_open = serializers.CharField()
+
+class UserSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    email = serializers.EmailField()
+    date = serializers.CharField()  # ISO format string
+    status = serializers.CharField()
+
+class OrderSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    order = serializers.CharField()
+    amount = serializers.CharField()
+    date = serializers.CharField()  # ISO format string
+    status = serializers.CharField()
+
+class RevenueOverviewSerializer(serializers.Serializer):
+    month = serializers.IntegerField()
+    total = serializers.FloatField()
+
+class UserGrowthSerializer(serializers.Serializer):
+    week = serializers.IntegerField()
+    count = serializers.IntegerField()        
+
+class OrderSerializerNotification(serializers.ModelSerializer):
+    class Meta:
+        model = Order
+        fields = ['id',  'created_at', 'status']
+
+class NotificationSerializer(serializers.ModelSerializer):
+    order = OrderSerializer(read_only=True)
+
+    class Meta:
+        model = NotificationMarchand
+        fields = ['id', 'message', 'is_read', 'created_at', 'order']
+

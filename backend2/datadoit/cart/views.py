@@ -10,8 +10,8 @@ from django.core.paginator import Paginator
 from users.authentication import JWTBearerAuthentication
 from boutique.models import  Produit
 from cart.models import  LignePanier, Order, OrderItem, Panier
-from users.models import Client
-from .serializers import OrderSerializer, PanierSerializer, LignePanierSerializer, WriteOrderSerializer
+from users.models import Client, User
+from .serializers import NotificationSerializer, OrderSerializer, PanierSerializer, LignePanierSerializer, RevenueOverviewSerializer, StatsSerializer, UserGrowthSerializer, UserSerializer, WriteOrderSerializer
 from django.db.models import Q
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated,AllowAny
@@ -159,7 +159,7 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from .models import Order, Client, Produit, OrderItem
+from .models import NotificationMarchand, Order, Client, Produit, OrderItem
 from decimal import Decimal
 import logging
 
@@ -333,3 +333,151 @@ def update_order_status(request, order_id):
     order.save()
     serializer = OrderSerializer(order)
     return Response(serializer.data)
+from django.db.models import Count, Sum
+from django.utils import timezone
+from datetime import timedelta
+from django.db.models import Count, Sum
+@api_view(['GET'])
+def dashboard_stats(request):
+    try:
+        total_users = User.objects.filter(role='client', is_active=True).count()
+        active_merchants = User.objects.filter(role='marchand', is_active=True, is_approved=True).count()
+        total_revenue = Order.objects.filter(status='payée').aggregate(total=Sum('total'))['total'] or 0
+        tickets_open = Order.objects.filter(status='pending').count()
+
+        stats = {
+            'total_users': str(total_users),
+            'active_merchants': str(active_merchants),
+            'total_revenue': f"${total_revenue:,.2f}",
+            'tickets_open': str(tickets_open),
+        }
+        serializer = StatsSerializer(stats)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        logger.error(f"Error fetching stats: {str(e)}")
+        return Response(
+            {
+                'total_users': '0',
+                'active_merchants': '0',
+                'total_revenue': '$0.00',
+                'tickets_open': '0',
+            },
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+@api_view(['GET'])
+def recent_users(request):
+    try:
+        users = User.objects.filter(
+            role='client',
+            is_active=True
+        ).select_related().order_by('-created_at')[:5]
+        users_data = [
+            {
+                'id': user.id,
+                'name': f"{user.prenom} {user.nom}",
+                'email': user.email,
+                'date': user.created_at.isoformat(),
+                'status': 'active' if user.is_active else 'inactive'
+            } for user in users
+        ]
+        serializer = UserSerializer(users_data, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        logger.error(f"Error fetching recent users: {str(e)}")
+        return Response([], status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+def recent_orders(request):
+    try:
+        orders = Order.objects.select_related('client__user').order_by('-created_at')[:5]
+        orders_data = [
+            {
+                'id': order.id,
+                'order': f'#ORD-{order.id}',
+                'amount': f"${order.total:,.2f}",
+                'date': order.created_at.isoformat(),
+                'status': order.status
+            } for order in orders
+        ]
+        serializer = OrderSerializer(orders_data, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        logger.error(f"Error fetching recent orders: {str(e)}")
+        return Response([], status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+def revenue_overview(request):
+    try:
+        current_year = timezone.now().year
+        logger.debug(f"Fetching revenue for year: {current_year}")
+        revenue_data = (
+            Order.objects.filter(
+                status='payée',
+                created_at__year=current_year
+            )
+            .values('created_at__month')
+            .annotate(total=Sum('total'))
+            .order_by('created_at__month')
+        )
+        logger.debug(f"Raw revenue data: {list(revenue_data)}")
+        
+        months = [{'month': i, 'total': 0.0} for i in range(1, 13)]
+        for data in revenue_data:
+            month = int(data['created_at__month'])
+            total = data['total']
+            if isinstance(total, (int, float)) and 1 <= month <= 12:
+                months[month - 1]['total'] = float(total)
+            else:
+                logger.warning(f"Invalid data for month {month}: total={total}")
+        
+        serializer = RevenueOverviewSerializer(months, many=True)
+        logger.debug(f"Serialized data: {serializer.data}")
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        logger.error(f"Error fetching revenue overview: {str(e)}", exc_info=True)
+        return Response(
+            [{'month': i, 'total': 0.0} for i in range(1, 13)],
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+@api_view(['GET'])
+def user_growth(request):
+    try:
+        end_date = timezone.now().date()
+        start_date = end_date - timedelta(weeks=12)
+        user_data = (
+            User.objects.filter(
+                role='client',
+                created_at__date__gte=start_date,
+                created_at__date__lte=end_date
+            )
+            .extra(
+                select={'week': "EXTRACT(week FROM created_at)"}
+            )
+            .values('week')
+            .annotate(count=Count('id'))
+            .order_by('week')
+        )
+        weeks = [
+            {'week': i, 'count': 0}
+            for i in range(int(start_date.isocalendar()[1]), int(end_date.isocalendar()[1]) + 1)
+        ]
+        for data in user_data:
+            week_index = int(data['week']) - int(start_date.isocalendar()[1])
+            if 0 <= week_index < len(weeks):
+                weeks[week_index]['count'] = data['count']
+        serializer = UserGrowthSerializer(weeks, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        logger.error(f"Error fetching user growth: {str(e)}", exc_info=True)
+        return Response(
+            [{'week': i, 'count': 0} for i in range(int(start_date.isocalendar()[1]), int(end_date.isocalendar()[1]) + 1)],
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def notification_list_view(request):
+    notifications = NotificationMarchand.objects.filter(user=request.user)
+    serializer = NotificationSerializer(notifications, many=True)
+    return Response(serializer.data)   

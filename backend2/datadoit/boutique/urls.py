@@ -24,7 +24,7 @@ urlpatterns = [
     path('category-produits/<int:pk>/', views.category_produit_retrieve_update_destroy, name='category_produit-detail'),
     
     # Produit URLs
-    path('produits/', views.produit_list_create, name='produit-list-create'),
+    path('Produits/', views.produit_list_create, name='produit-list-create'),
     path('produits/<int:pk>/', views.produit_detail, name='produit-detail'),
 
     path('boutiques/all/', views.list_boutiques, name='list_boutiques'),
@@ -37,6 +37,14 @@ urlpatterns = [
     path('wishlist/add/', views.add_to_wishlist, name='add_to_wishlist'),
     path('wishlist/remove/<int:produit_id>/', views.remove_from_wishlist, name='remove_from_wishlist'),
     path('wishlist/clear/', views.clear_wishlist, name='clear_wishlist'),
+      path('products/popular/', views.get_popular_products, name='popular-products'),
+    path('produits/<int:produit_id>/rating/', views.submit_rating, name='submit_product_rating'),
+    path('produits/new/', views.get_new_products, name='get_new_products'),
 
-    
+
+    path('boutiques/<int:boutique_id>/dashboard/overview/', views.dashboard_overview, name='dashboard-overview'),
+    path('boutiques/<int:boutique_id>/dashboard/monthly-sales/', views.monthly_sales, name='monthly-sales'),
+    path('boutiques/<int:boutique_id>/dashboard/products-by-category/', views.products_by_category, name='products-by-category'),
+    path('boutiques/<int:boutique_id>/dashboard/top-selling-products/', views.top_selling_products, name='top-selling-products'),
+    path('boutiques/<int:boutique_id>/dashboard/out-of-stock-products/', views.out_of_stock_products, name='out-of-stock-products'),
 ]

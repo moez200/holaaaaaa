@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { Vendor } from '../../types';
 
 
+
 interface VendorCardProps {
   vendor: Vendor;
 }

@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from cart.serializers import ClientSerializerCart, ProduitSerializerCart
 from users.models import Marchand, User
-from .models import CategoryBoutique, Boutique, CategoryProduit, Produit, Wishlist, WishlistItem
+from .models import CategoryBoutique, Boutique, CategoryProduit, Produit, Rating, Wishlist, WishlistItem
 import logging
 import os
 from django.db import transaction
@@ -326,7 +326,7 @@ class ProduitSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'nom', 'description', 'prix', 'prix_reduit', 'stock', 'image', 'image_file',
             'couleur', 'taille', 'category_produit', 'category_produit_details', 'boutique',
-            'boutique_details', 'note', 'en_stock', 'est_nouveau', 'est_mis_en_avant',
+            'boutique_details', 'average_rating', 'en_stock', 'est_nouveau', 'est_mis_en_avant',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'category_produit_details', 'boutique_details']
@@ -472,3 +472,135 @@ class WishlistSerializer(serializers.ModelSerializer):
     class Meta:
         model = Wishlist
         fields = ['id', 'client', 'created_at', 'updated_at', 'items']        
+
+class RatingSerializer(serializers.ModelSerializer):
+    value = serializers.IntegerField()  # Explicitly define to ensure clarity
+
+    class Meta:
+        model = Rating
+        fields = ['value']
+        # No extra_kwargs needed; model validators handle min/max
+
+    def validate(self, data):
+        request = self.context.get('request')
+        produit_id = self.context.get('produit_id')
+
+        # Check authentication
+        if not request or not request.user.is_authenticated:
+            logger.error("Tentative de notation sans authentification")
+            raise serializers.ValidationError("Utilisateur non authentifié.")
+
+        # Check user role
+        if request.user.role != 'client':
+            logger.error(f"Tentative de notation par un non-client: {request.user.nom}")
+            raise serializers.ValidationError("Seuls les clients peuvent noter les produits.")
+
+        # Check produit exists
+        if not produit_id:
+            logger.error("ID du produit manquant dans la requête")
+            raise serializers.ValidationError("ID du produit manquant.")
+        try:
+            produit = Produit.objects.get(id=produit_id)
+        except Produit.DoesNotExist:
+            logger.error(f"Produit avec id {produit_id} non trouvé")
+            raise serializers.ValidationError("Produit non trouvé.")
+
+        # Check for existing rating
+        if Rating.objects.filter(produit_id=produit_id, user=request.user).exists():
+            logger.error(f"Utilisateur {request.user.nom} a déjà noté le produit {produit_id}")
+            raise serializers.ValidationError("Vous avez déjà noté ce produit.")
+
+        # Optional: Verify purchase (uncomment if needed)
+        # from order.models import Order
+        # if not Order.objects.filter(user=request.user, produit=produit, status='completed').exists():
+        #     logger.error(f"Utilisateur {request.user.username} n'a pas acheté le produit {produit_id}")
+        #     raise serializers.ValidationError("Vous devez acheter ce produit pour le noter.")
+
+        logger.debug(f"Validation réussie pour la notation: produit_id={produit_id}, user={request.user.nom}, value={data['value']}")
+        return data
+
+    def create(self, validated_data):
+        request = self.context.get('request')
+        produit_id = self.context.get('produit_id')
+        try:
+            produit = Produit.objects.get(id=produit_id)
+            with transaction.atomic():
+                rating = Rating.objects.create(
+                    produit=produit,
+                    user=request.user,
+                    value=validated_data['value']
+                )
+                # Update product's average_rating
+                produit.calculate_average_rating()
+                logger.info(f"Note créée: produit_id={produit_id}, user={request.user.nom}, value={rating.value}, new_average={produit.average_rating}")
+            return rating
+        except Exception as e:
+            logger.error(f"Erreur lors de la création de la note pour produit_id={produit_id}: {str(e)}")
+            raise
+
+
+
+
+
+class CategoryBoutiqueSerializerDashboard(serializers.ModelSerializer):
+    image = serializers.ImageField(use_url=True, allow_null=True)
+
+    class Meta:
+        model = CategoryBoutique
+        fields = ['id', 'nom', 'image']
+
+class MarchandSerializerDashboard(serializers.ModelSerializer):
+    class Meta:
+        model = 'users.Marchand'  # Assume Marchand model exists
+        fields = ['id', 'name', 'logo', 'description', 'rating']
+
+class BoutiqueSerializerDashboard(serializers.ModelSerializer):
+    category_boutique = CategoryBoutiqueSerializerDashboard()
+    marchand = MarchandSerializer()
+    logo = serializers.ImageField(use_url=True, allow_null=True)
+    image = serializers.ImageField(use_url=True, allow_null=True)
+
+    class Meta:
+        model = Boutique
+        fields = ['id', 'nom', 'description', 'logo', 'adresse', 'telephone', 'email', 'image', 'category_boutique', 'marchand', 'is_approved', 'created_at', 'updated_at']
+
+class CategoryProduitSerializerDashboard(serializers.ModelSerializer):
+    image = serializers.ImageField(use_url=True, allow_null=True)
+
+    class Meta:
+        model = CategoryProduit
+        fields = ['id', 'nom', 'image', 'boutique']
+
+class ProductSerializerDashboard(serializers.ModelSerializer):
+    image = serializers.ImageField(use_url=True, allow_null=True)
+    category_produit = CategoryProduitSerializerDashboard()
+
+    class Meta:
+        model = Produit
+        fields = ['id', 'nom', 'prix', 'stock', 'image', 'couleur', 'taille', 'category_produit', 'average_rating', 'en_stock', 'est_nouveau', 'est_mis_en_avant']
+
+class DashboardOverviewSerializer(serializers.Serializer):
+    total_sales = serializers.DecimalField(max_digits=10, decimal_places=2)
+    total_orders = serializers.IntegerField()
+    total_products = serializers.IntegerField()
+    active_customers = serializers.IntegerField()
+
+class MonthlySalesSerializer(serializers.Serializer):
+    month = serializers.CharField()
+    sales = serializers.DecimalField(max_digits=10, decimal_places=2)
+
+class ProductsByCategorySerializer(serializers.Serializer):
+    category = serializers.CharField(source='nom')
+    product_count = serializers.IntegerField()
+
+class TopSellingProductSerializer(serializers.ModelSerializer):
+    total_sold = serializers.IntegerField()
+    image = serializers.ImageField(use_url=True, allow_null=True)
+    category_name = serializers.CharField(source='category_produit.nom', read_only=True)
+
+    class Meta:
+        model = Produit
+        fields = ['id', 'nom', 'prix', 'image', 'total_sold', 'category_name']
+
+class OutOfStockSerializer(serializers.Serializer):
+    out_of_stock_count = serializers.IntegerField()

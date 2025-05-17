@@ -1,5 +1,5 @@
 import api from '../axiosInstance';
-import { ProduitCreatePayload, ProduitUpdatePayload, CategoryProduitCreatePayload, CategoryProduitUpdatePayload, Boutique, BoutiqueUpdatePayload, CategoryProduit, CategoryBoutique, Product } from '../types';
+import { ProduitCreatePayload, ProduitUpdatePayload, CategoryProduitCreatePayload, CategoryProduitUpdatePayload, Boutique, BoutiqueUpdatePayload, CategoryProduit, CategoryBoutique, product, Produit } from '../types';
 
 
 
@@ -81,7 +81,7 @@ export const updateBoutique = async (id: number, boutiqueData: BoutiqueUpdatePay
 export const getBoutiqueDetails = async (boutiqueId: string): Promise<{
   boutique: Boutique;
   categories: CategoryProduit[];
-  products: Product[];
+  products: product[];
 }> => {
   try {
     const response = await api.get(`boutique/boutiques/${boutiqueId}/details/`);
@@ -99,7 +99,7 @@ export const getBoutiqueDetails = async (boutiqueId: string): Promise<{
   }
 };
 
-export const getBoutiqueProductsByCategory = async (boutiqueId: string, categoryId: string): Promise<Product[]> => {
+export const getBoutiqueProductsByCategory = async (boutiqueId: string, categoryId: string): Promise<product[]> => {
   try {
     const response = await api.get(`boutique/boutiques/${boutiqueId}/categories/${categoryId}/produits/`);
     return response.data;
@@ -110,33 +110,33 @@ export const getBoutiqueProductsByCategory = async (boutiqueId: string, category
 };
 
 // Produit Services
-export const getProduits = async (categoryProduitId?: string): Promise<Product[]> => {
+export const getProduits = async (categoryProduitId?: string): Promise<product[]> => {
   const params = categoryProduitId ? { category_produit_id: categoryProduitId } : {};
-  const response = await api.get<Product[]>('boutique/produits/', { params });
+  const response = await api.get<product[]>('boutique/produits/', { params });
   return response.data;
 };
 
-export const createProduit = async (produitData: ProduitCreatePayload): Promise<Product> => {
+export const createProduit = async (produitData: ProduitCreatePayload): Promise<product> => {
   const formData = new FormData();
   Object.entries(produitData).forEach(([key, value]) => {
     if (value !== null && value !== undefined) {
       formData.append(key, value as string | Blob);
     }
   });
-  const response = await api.post<Product>('boutique/produits/', formData, {
+  const response = await api.post<product>('boutique/produits/', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
   return response.data;
 };
 
-export const updateProduit = async (id: number, produitData: ProduitUpdatePayload): Promise<Product> => {
+export const updateProduit = async (id: number, produitData: ProduitUpdatePayload): Promise<product> => {
   const formData = new FormData();
   Object.entries(produitData).forEach(([key, value]) => {
     if (value !== null && value !== undefined) {
       formData.append(key, value as string | Blob);
     }
   });
-  const response = await api.put<Product>(`boutique/produits/${id}/`, formData, {
+  const response = await api.put<product>(`boutique/produits/${id}/`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
   return response.data;
@@ -242,5 +242,73 @@ export const deleteBoutique = async (
   } catch (error: any) {
     console.error(`Error deleting boutique ${boutiqueId}:`, error);
     return { success: false, error: error.response?.data?.error || error.message };
+  }
+};
+
+
+
+
+
+
+
+
+
+
+export const getDashboardOverview = async (boutiqueId: string): Promise<{
+  total_sales: number;
+  total_orders: number;
+  total_products: number;
+  active_customers: number;
+}> => {
+  try {
+    const response = await api.get(`boutique/boutiques/${boutiqueId}/dashboard/overview/`);
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching dashboard overview:', error);
+    throw error;
+  }
+};
+
+export const getMonthlySales = async (boutiqueId: string): Promise<{ month: string; sales: number }[]> => {
+  try {
+    const response = await api.get(`boutique/boutiques/${boutiqueId}/dashboard/monthly-sales/`);
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching monthly sales:', error);
+    throw error;
+  }
+};
+
+export const getProductsByCategory = async (boutiqueId: string): Promise<{ category: string; product_count: number }[]> => {
+  try {
+    const response = await api.get(`boutique/boutiques/${boutiqueId}/dashboard/products-by-category/`);
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching products by category:', error);
+    throw error;
+  }
+};
+
+export const getTopSellingProducts = async (boutiqueId: number): Promise<Produit[]> => {
+  const response = await api.get(`boutique/boutiques/${boutiqueId}/dashboard/top-selling-products/`);
+  console.log('hhhh',response)
+  return response.data.map((item: Produit) => ({
+    id: item.id,
+    nom: item.nom,
+    category_name: item.category_name,
+    prix: item.prix != null ? parseFloat(item.prix.toString()) : 0,
+    total_sold: item.total_sold || 0,
+    stock: item.stock || 0,
+    image: item.image,
+  }));
+};
+
+export const getOutOfStockProducts = async (boutiqueId: string): Promise<number> => {
+  try {
+    const response = await api.get(`boutique/boutiques/${boutiqueId}/dashboard/out-of-stock-products/`);
+    return response.data.out_of_stock_count;
+  } catch (error) {
+    console.error('Error fetching out-of-stock products:', error);
+    throw error;
   }
 };

@@ -1,3 +1,4 @@
+from datetime import timedelta
 from django.utils import timezone
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
@@ -5,7 +6,7 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 import logging
 import uuid
-
+from django.db.models import Avg
 
 from django.db import models
 from django.contrib.auth.models import User
@@ -228,15 +229,44 @@ class Marchand(models.Model):
         User,
         on_delete=models.CASCADE,
         primary_key=True,
-        related_name='marchand_profile'
+        related_name='marchand_profile',
+        verbose_name=("Utilisateur")
     )
-    is_marchant = models.BooleanField(default=True)
+    is_marchant = models.BooleanField(default=True, verbose_name=("Est marchand"))
+    average_rating = models.FloatField(default=0.0, verbose_name=("Note moyenne"))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=("Créé le"))
+    updated_at = models.DateTimeField(auto_now=True, verbose_name=("Mis à jour le"))
 
     class Meta:
         db_table = 'marchands'
+        verbose_name = ("Marchand")
+        verbose_name_plural = ("Marchands")
 
     def __str__(self):
         return f"Marchand: {self.user.prenom} {self.user.nom}"
+
+    @property
+    def marchand_name(self):
+        """Retourne le nom complet du marchand."""
+        return f"{self.user.prenom} {self.user.nom}"
+
+    @property
+    def products_count(self):
+        """Calcule le nombre de produits associés au marchand."""
+        return self.produits.count()
+
+    @property
+    def est_nouveau(self):
+        """Vérifie si le marchand est nouveau (moins de 30 jours)."""
+        return timezone.now() < self.created_at + timedelta(days=30)
+
+    def calculate_average_rating(self):
+        """Calcule la note moyenne basée sur les produits du marchand."""
+        ratings = self.produits.aggregate(avg_rating=Avg('average_rating'))
+        avg_rating = ratings['avg_rating'] or 0.0
+        self.average_rating = round(avg_rating, 1)
+        self.save(update_fields=['average_rating'])
+        return self.average_rating
 
 class Admin(models.Model):
     user = models.OneToOneField(
@@ -279,3 +309,24 @@ def create_user_profile(sender, instance, created, **kwargs):
             if not hasattr(instance, 'admin_profile'):
                 Admin.objects.create(user=instance)
                 logger.debug(f"Created Admin profile for user: {instance.email}")
+
+
+class Comment(models.Model):
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='comments',
+        verbose_name=("Utilisateur")
+    )
+    content = models.TextField(verbose_name=("Contenu"))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=("Créé le"))
+    updated_at = models.DateTimeField(auto_now=True, verbose_name=("Mis à jour le"))
+
+    class Meta:
+        db_table = 'comments'
+        verbose_name = ("Commentaire")
+        verbose_name_plural = ("Commentaires")
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Commentaire de {self.user.prenom} {self.user.nom}"

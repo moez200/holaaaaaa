@@ -1,5 +1,6 @@
 
 
+import axios from 'axios';
 import api from '../axiosInstance';
 import { CategoryProduit,  Boutique, ProduitCreatePayload, BoutiqueUpdatePayload, Product } from '../types';
 
@@ -120,7 +121,7 @@ export const updateBoutique = async (id: number, boutiqueData: BoutiqueUpdatePay
 export const getBoutiqueDetails = async (boutiqueId: string): Promise<{
   boutique: Boutique;
   categories: CategoryProduit[];
-  products: Produit[];
+  products: Product[];
 }> => {
   try {
     const response = await api.get(`boutique/boutiques/${boutiqueId}/details/`);
@@ -141,3 +142,28 @@ export const getBoutiqueDetails = async (boutiqueId: string): Promise<{
   }
 };
 
+export const submitRating = (produitId: number, value: number) => {
+  return axios.post(`http://localhost:8000/boutique/produits/${produitId}/rating/`, {
+    value: value, // 👈 assure-toi que c'est bien "value"
+  });
+};
+
+export const getPopularProducts = async () => {
+  try {
+    const response = await axios.get('http://localhost:8000/boutique/products/popular/');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching popular products:', error);
+    throw error;
+  }
+};
+
+export const getNewProducts = async () => {
+  try {
+    const response = await axios.get('http://localhost:8000/boutique/produits/new/');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching new products:', error);
+    throw error;
+  }
+};

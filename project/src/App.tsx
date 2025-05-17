@@ -1,7 +1,7 @@
 // src/App.tsx
 import { Route, Routes, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-import { AuthProvider } from './contexts/AuthContext';
+
 import { CartProvider } from './contexts/CartContext';
 import { WishlistProvider } from './contexts/WishlistContext';
 
@@ -27,6 +27,7 @@ import ProductCard from './pages/ProductDetailPage';
 
 import Layout from './components/layout/layoutt';
 import PaiementClient from './pages/PaiementClient';
+import CustomerMessages from './dashboard/CustomerMessages';
 
 function App() {
 
@@ -93,6 +94,9 @@ function App() {
                 <Route path="MerchantDashboard/:boutiqueId" element={<MerchantDashboard />} />
                 <Route path="AdminDashboard" element={<AdminDashboard />} />
                 <Route path="ShopCreatorPage" element={<ShopCreatorPage />} />
+                <Route path="/boutique/:boutiqueId/messages" element={<CustomerMessages />} />
+
+                
               </Route>
               {/* Routes without Layout */}
               <Route path="login" element={<LoginPage />} />

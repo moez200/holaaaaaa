@@ -2,15 +2,16 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { useAuthStore } from './authStore';
-import { Product } from '../../types';
+
 import api from '../../axiosInstance';
+import { product } from '../../types';
 
 interface WishlistState {
-  items: Product[];
+  items: product[];
   isLoading: boolean;
   error: string | null;
   fetchWishlist: (clientId: number) => Promise<void>;
-  addToWishlist: (product: Product) => Promise<void>;
+  addToWishlist: (product: product) => Promise<void>;
   removeFromWishlist: (productId: number) => Promise<void>;
   isInWishlist: (productId: number) => boolean;
   clearWishlist: () => Promise<void>;
@@ -33,7 +34,7 @@ export const useWishlistStore = create<WishlistState>()(
             price: parseFloat(item.produit.prix),
             discountedPrice: item.produit.prix_reduit ? parseFloat(item.produit.prix_reduit) : undefined,
             stock: item.produit.stock,
-            images: item.produit.image ? [item.produit.image] : ['https://via.placeholder.com/300'],
+            image: item.produit.image ? [item.produit.image] : ['https://via.placeholder.com/300'],
             couleur: item.produit.couleur,
             taille: item.produit.taille,
             category: item.produit.category_produit_details?.nom || 'Unknown',

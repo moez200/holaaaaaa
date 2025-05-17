@@ -1,41 +1,70 @@
 import React from 'react';
 import { DollarSign, Package, ShoppingCart, Truck } from 'lucide-react';
-import { mockProducts, mockOrders } from './data/mockData';
+import { Box, CircularProgress, Typography } from '@mui/material';
 import ChartCard from './ui/ChartCard';
 import ProductTable from './ui/ProductTable';
 import StatCard from './ui/StatCard';
+import { Produit } from '../types';
 
 
-const Overview: React.FC = () => {
-  // Calculate statistics
-  const totalProducts = mockProducts.length;
-  const totalOrders = mockOrders.length;
-  const totalRevenue = mockOrders.reduce((sum, order) => sum + order.total, 0);
-  const outOfStockProducts = mockProducts.filter(product => product.stock === 0).length;
-  
-  // Get 5 best-selling products for the table
-  const topProducts = [...mockProducts]
-    .sort((a, b) => b.sold - a.sold)
-    .slice(0, 5);
+interface DashboardData {
+  overview: {
+    total_sales: number | string;
+    total_orders: number;
+    total_products: number;
+    active_customers: number;
+  } | null;
+  monthlySales: { month: string; sales: number }[];
+  productsByCategory: { category: string; product_count: number }[];
+  topSellingProducts: Produit[];
+  outOfStockProducts: number;
+}
 
-  // Monthly sales data for chart (last 6 months)
-  const monthlyData = [
-    { name: 'Jan', value: 12500 },
-    { name: 'Fév', value: 18200 },
-    { name: 'Mar', value: 16900 },
-    { name: 'Avr', value: 21500 },
-    { name: 'Mai', value: 25800 },
-    { name: 'Juin', value: 23100 },
-  ];
+interface OverviewProps {
+  dashboardData: DashboardData;
+}
 
-  // Products by category for pie chart
-  const categoryData = [
-    { name: 'Fashion', value: 35 },
-    { name: 'Beauty', value: 20 },
-    { name: 'Electronics', value: 15 },
-    { name: 'Home', value: 30 },
-  ];
+const Overview: React.FC<OverviewProps> = ({ dashboardData }) => {
+  // Handle loading state
+  if (!dashboardData.overview) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+console.log('dashboardData',dashboardData)
+  // Extract statistics
+  const totalProducts = dashboardData.overview.total_products;
+  const totalOrders = dashboardData.overview.total_orders;
+  const totalRevenue = typeof dashboardData.overview.total_sales === 'string'
+    ? parseFloat(dashboardData.overview.total_sales)
+    : dashboardData.overview.total_sales;
+  const outOfStockProducts = dashboardData.outOfStockProducts;
 
+  // Map monthly sales data
+  const monthlyData = dashboardData.monthlySales.map((sale) => ({
+    name: sale.month,
+    value: sale.sales,
+  }));
+
+  // Map products by category
+  const categoryData = dashboardData.productsByCategory.map((category) => ({
+    name: category.category,
+    value: category.product_count,
+  }));
+
+  // Top 5 products (already sorted by backend)
+  const topProducts = dashboardData.topSellingProducts.map((product) => ({
+    id: product.id,
+    nom: product.nom,
+    category_name: product.category_name,
+    prix: product.prix,
+    stock: product.stock,
+    total_sold: product.total_sold,
+    image: product.image,
+  }));
+console.log('topProducts',topProducts)
   return (
     <div className="space-y-6">
       <div>
@@ -81,7 +110,7 @@ const Overview: React.FC = () => {
           title="Ventes Mensuelles"
           subtitle="6 derniers mois"
           type="bar"
-          data={monthlyData}
+          data={monthlyData.slice(-6)} // Show last 6 months
         />
         <ChartCard 
           title="Produits par Catégorie"
@@ -91,7 +120,7 @@ const Overview: React.FC = () => {
         />
       </div>
 
-      {/* Recent Orders & Top Products */}
+      {/* Top Products */}
       <div>
         <h2 className="text-lg font-bold text-gray-800 mb-4">Produits les Plus Vendus</h2>
         <ProductTable products={topProducts} />

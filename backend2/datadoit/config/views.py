@@ -599,17 +599,28 @@ def client_detail(request, pk):
 # --- Notification API ---
 
 @api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])  # Assurez-vous que l'utilisateur est connecté
 def notification_list_create(request):
     if request.method == 'GET':
-        notifications = Notification.objects.all()
-        serializer = NotificationSerializer(notifications, many=True)
-        return Response(serializer.data)
+        try:
+            # Vérifie que l'utilisateur a un profil client
+            if not hasattr(request.user, 'client_profile'):
+                return Response({'error': 'Aucun profil client trouvé pour cet utilisateur.'}, status=status.HTTP_404_NOT_FOUND)
+
+            client = request.user.client_profile
+            notifications = Notification.objects.filter(client=client).order_by('-date')
+            serializer = NotificationSerializer(notifications, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
     elif request.method == 'POST':
         serializer = NotificationSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 @api_view(['GET', 'PUT', 'DELETE'])
 def notification_detail(request, pk):

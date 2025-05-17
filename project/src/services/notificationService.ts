@@ -26,7 +26,7 @@ export const notificationService = {
   // Mark all notifications as read
   markAllNotificationsAsRead: async (): Promise<void> => {
     try {
-      await api.patch('/notifications/read-all/');
+      await api.patch('config/notifications/read-all/');
     } catch (error) {
       throw new Error('Failed to mark all notifications as read');
     }
@@ -35,7 +35,7 @@ export const notificationService = {
   // Delete a notification
   deleteNotification: async (id: string): Promise<void> => {
     try {
-      await api.delete(`/notifications/${id}/`);
+      await api.delete(`config/notifications/${id}/`);
     } catch (error) {
       throw new Error('Failed to delete notification');
     }

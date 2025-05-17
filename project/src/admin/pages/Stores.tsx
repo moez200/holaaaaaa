@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Plus, Trash2, Eye, Check, X, RefreshCw } from 'lucide-react';
+import { Search, Plus, Trash2, Eye, Check, XCircle, RefreshCw } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { getAllBoutiques, createBoutique, deleteBoutique, getBoutiquesall, approveBoutique, rejectBoutique } from '../../services/boutiqueService';
+import {  createBoutique, deleteBoutique, getBoutiquesall, approveBoutique, rejectBoutique } from '../../services/boutiqueService';
 import { getCategories } from '../../services/categorieService';
 import { Boutique, CategoryBoutique } from '../../types';
 import { useAuthStore } from '../../components/Store/authStore';
@@ -34,8 +34,8 @@ const Stores: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pagination, setPagination] = useState<Pagination>({
-    currentPage: 4,
-    totalPages: 4,
+    currentPage: 1,
+    totalPages: 1,
     pageSize: 10,
     totalCount: 0,
   });
@@ -70,15 +70,24 @@ const Stores: React.FC = () => {
     setError(null);
     try {
       const boutiques = await getBoutiquesall();
-      console.log('Fetched boutiques:', boutiques);
-      setBoutiques(boutiques);
-      setFilteredBoutiques(boutiques);
-      updatePagination(boutiques);
+      // Normaliser is_approved pour gérer undefined
+      const normalizedBoutiques = boutiques.map(b => ({
+        ...b,
+        is_approved: b.is_approved === undefined ? null : b.is_approved
+      }));
+      console.log('Boutiques fetched:', normalizedBoutiques.map(b => ({
+        id: b.id,
+        nom: b.nom,
+        is_approved: b.is_approved,
+        is_approved_type: typeof b.is_approved
+      })));
+      setBoutiques(normalizedBoutiques);
+      setFilteredBoutiques(normalizedBoutiques);
+      updatePagination(normalizedBoutiques);
     } catch (err: any) {
       const errorMessage = err.message || 'Échec de la récupération des boutiques';
       setError(errorMessage);
       toast.error(errorMessage);
-      console.error('Erreur lors de la récupération des boutiques:', err);
     } finally {
       setLoading(false);
     }
@@ -90,7 +99,6 @@ const Stores: React.FC = () => {
       const categoriesData = await getCategories();
       setCategories(categoriesData);
     } catch (err: any) {
-      console.error('Erreur lors de la récupération des catégories:', err);
       toast.error('Échec de la récupération des catégories');
     }
   }, []);
@@ -118,6 +126,7 @@ const Stores: React.FC = () => {
   // Approuver une boutique
   const handleApprove = async (boutiqueId: number) => {
     try {
+      console.log('Approving boutique:', boutiqueId); // Debug
       const updatedBoutique = await approveBoutique(boutiqueId);
       const updatedBoutiques = boutiques.map((b) =>
         b.id === boutiqueId ? updatedBoutique : b
@@ -127,16 +136,17 @@ const Stores: React.FC = () => {
       updatePagination(updatedBoutiques);
       toast.success('Boutique approuvée avec succès');
     } catch (err: any) {
+      console.error('Approve error:', err);
       const errorMessage = err.response?.data?.error || 'Échec de l\'approbation de la boutique';
       toast.error(errorMessage);
-      console.error('Erreur lors de l\'approbation:', err);
     }
   };
 
   // Rejeter une boutique
   const handleReject = async (boutiqueId: number) => {
-    if (window.confirm('Êtes-vous sûr de vouloir rejeter cette boutique ?')) {
+  
       try {
+        console.log('Rejecting boutique:', boutiqueId); // Debug
         const updatedBoutique = await rejectBoutique(boutiqueId);
         const updatedBoutiques = boutiques.map((b) =>
           b.id === boutiqueId ? updatedBoutique : b
@@ -146,12 +156,12 @@ const Stores: React.FC = () => {
         updatePagination(updatedBoutiques);
         toast.success('Boutique rejetée avec succès');
       } catch (err: any) {
+        console.error('Reject error:', err);
         const errorMessage = err.response?.data?.error || 'Échec du rejet de la boutique';
         toast.error(errorMessage);
-        console.error('Erreur lors du rejet:', err);
       }
     }
-  };
+
 
   // Supprimer une boutique
   const handleDelete = async (boutiqueId: number) => {
@@ -166,12 +176,11 @@ const Stores: React.FC = () => {
       } catch (err: any) {
         const errorMessage = err.response?.data?.error || 'Échec de la suppression de la boutique';
         toast.error(errorMessage);
-        console.error('Erreur lors de la suppression:', err);
       }
     }
   };
 
-  // Ajouter une boutique
+  // Valider et ajouter une boutique
   const handleAddBoutique = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newBoutique.nom || !newBoutique.category_boutique) {
@@ -193,7 +202,7 @@ const Stores: React.FC = () => {
     }
     try {
       const boutique = await createBoutique(formData);
-      const updatedBoutiques = [...boutiques, boutique];
+      const updatedBoutiques = [...boutiques, { ...boutique, is_approved: null }]; // Force is_approved to null
       setBoutiques(updatedBoutiques);
       setFilteredBoutiques(updatedBoutiques);
       updatePagination(updatedBoutiques);
@@ -212,7 +221,6 @@ const Stores: React.FC = () => {
     } catch (err: any) {
       const errorMessage = err.response?.data?.error || 'Échec de la création de la boutique';
       toast.error(errorMessage);
-      console.error('Erreur lors de la création:', err);
     }
   };
 
@@ -276,130 +284,152 @@ const Stores: React.FC = () => {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Gestion des Boutiques</h1>
         <button
-          className="btn btn-primary flex items-center"
+          className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
           onClick={() => setShowAddModal(true)}
           aria-label="Ajouter une boutique"
         >
-          <Plus className="mr-2" /> Ajouter Boutique
+          <Plus className="mr-2" size={18} /> Ajouter Boutique
         </button>
       </div>
 
       {/* Modal d'ajout de boutique */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center">
-          <div className="bg-white p-6 rounded-lg w-full max-w-md">
-            <h2 className="text-xl font-bold mb-4">Ajouter une Nouvelle Boutique</h2>
-            <form onSubmit={handleAddBoutique}>
-              <div className="mb-4">
-                <label htmlFor="nom" className="block text-sm font-medium">Nom</label>
-                <input
-                  id="nom"
-                  type="text"
-                  value={newBoutique.nom}
-                  onChange={(e) => setNewBoutique({ ...newBoutique, nom: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2"
-                  required
-                  aria-required="true"
-                />
-              </div>
-              <div className="mb-4">
-                <label htmlFor="description" className="block text-sm font-medium">Description</label>
-                <textarea
-                  id="description"
-                  value={newBoutique.description}
-                  onChange={(e) => setNewBoutique({ ...newBoutique, description: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2"
-                />
-              </div>
-              <div className="mb-4">
-                <label htmlFor="adresse" className="block text-sm font-medium">Adresse</label>
-                <input
-                  id="adresse"
-                  type="text"
-                  value={newBoutique.adresse}
-                  onChange={(e) => setNewBoutique({ ...newBoutique, adresse: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2"
-                />
-              </div>
-              <div className="mb-4">
-                <label htmlFor="telephone" className="block text-sm font-medium">Téléphone</label>
-                <input
-                  id="telephone"
-                  type="text"
-                  value={newBoutique.telephone}
-                  onChange={(e) => setNewBoutique({ ...newBoutique, telephone: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2"
-                />
-              </div>
-              <div className="mb-4">
-                <label htmlFor="email" className="block text-sm font-medium">Email</label>
-                <input
-                  id="email"
-                  type="email"
-                  value={newBoutique.email}
-                  onChange={(e) => setNewBoutique({ ...newBoutique, email: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2"
-                />
-              </div>
-              <div className="mb-4">
-                <label htmlFor="category_boutique" className="block text-sm font-medium">Catégorie</label>
-                <select
-                  id="category_boutique"
-                  value={newBoutique.category_boutique}
-                  onChange={(e) => setNewBoutique({ ...newBoutique, category_boutique: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2"
-                  required
-                  aria-required="true"
-                >
-                  <option value="">Sélectionner une catégorie</option>
-                  {categories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.nom}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="mb-4">
-                <label htmlFor="logo" className="block text-sm font-medium">Logo</label>
-                <input
-                  id="logo"
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => setNewBoutique({ ...newBoutique, logo: e.target.files?.[0] || null })}
-                  className="w-full border rounded-lg px-3 py-2"
-                />
-              </div>
-              <div className="mb-4">
-                <label htmlFor="image" className="block text-sm font-medium">Image</label>
-                <input
-                  id="image"
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => setNewBoutique({ ...newBoutique, image: e.target.files?.[0] || null })}
-                  className="w-full border rounded-lg px-3 py-2"
-                />
-              </div>
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="mr-2 px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300"
-                  aria-label="Annuler"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
-                  aria-label="Créer la boutique"
-                >
-                  Créer
-                </button>
-              </div>
-            </form>
+      // Modifier la partie du modal d'ajout de boutique
+{showAddModal && (
+   <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
+  <div
+    className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center"
+    onClick={() => setShowAddModal(false)}
+    aria-modal="true"
+    role="dialog"
+  >
+    <div
+      className="bg-white p-6 rounded-lg w-full max-w-4xl" // Augmenter la largeur max
+      onClick={(e) => e.stopPropagation()}
+    >
+      <h2 className="text-xl font-bold mb-4">Nouvelle Boutique</h2>
+      <form onSubmit={handleAddBoutique} className="grid grid-cols-1 md:grid-cols-2 gap-4"> {/* Grid horizontal */}
+        {/* Colonne gauche */}
+        <div className="space-y-4">
+          <div>
+            <label htmlFor="nom" className="block text-sm font-medium">Nom *</label>
+            <input
+              id="nom"
+              type="text"
+              value={newBoutique.nom}
+              onChange={(e) => setNewBoutique({ ...newBoutique, nom: e.target.value })}
+              className="w-full border rounded-lg px-3 py-2"
+              required
+              aria-required="true"
+            />
+          </div>
+          <div>
+            <label htmlFor="category_boutique" className="block text-sm font-medium">Catégorie *</label>
+            <select
+              id="category_boutique"
+              value={newBoutique.category_boutique}
+              onChange={(e) => setNewBoutique({ ...newBoutique, category_boutique: e.target.value })}
+              className="w-full border rounded-lg px-3 py-2"
+              required
+              aria-required="true"
+            >
+              <option value="">Sélectionner</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.nom}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="email" className="block text-sm font-medium">Email</label>
+            <input
+              id="email"
+              type="email"
+              value={newBoutique.email}
+              onChange={(e) => setNewBoutique({ ...newBoutique, email: e.target.value })}
+              className="w-full border rounded-lg px-3 py-2"
+            />
+          </div>
+          <div>
+            <label htmlFor="telephone" className="block text-sm font-medium">Téléphone</label>
+            <input
+              id="telephone"
+              type="text"
+              value={newBoutique.telephone}
+              onChange={(e) => setNewBoutique({ ...newBoutique, telephone: e.target.value })}
+              className="w-full border rounded-lg px-3 py-2"
+            />
           </div>
         </div>
-      )}
+
+        {/* Colonne droite */}
+        <div className="space-y-4">
+          <div>
+            <label htmlFor="adresse" className="block text-sm font-medium">Adresse</label>
+            <input
+              id="adresse"
+              type="text"
+              value={newBoutique.adresse}
+              onChange={(e) => setNewBoutique({ ...newBoutique, adresse: e.target.value })}
+              className="w-full border rounded-lg px-3 py-2"
+            />
+          </div>
+          <div>
+            <label htmlFor="description" className="block text-sm font-medium">Description</label>
+            <textarea
+              id="description"
+              value={newBoutique.description}
+              onChange={(e) => setNewBoutique({ ...newBoutique, description: e.target.value })}
+              className="w-full border rounded-lg px-3 py-2"
+              rows={3}
+            />
+          </div>
+          <div>
+            <label htmlFor="logo" className="block text-sm font-medium">Logo</label>
+            <input
+              id="logo"
+              type="file"
+              accept="image/*"
+              onChange={(e) => setNewBoutique({ ...newBoutique, logo: e.target.files?.[0] || null })}
+              className="w-full border rounded-lg px-3 py-2"
+            />
+          </div>
+          <div>
+            <label htmlFor="image" className="block text-sm font-medium">Image</label>
+            <input
+              id="image"
+              type="file"
+              accept="image/*"
+              onChange={(e) => setNewBoutique({ ...newBoutique, image: e.target.files?.[0] || null })}
+              className="w-full border rounded-lg px-3 py-2"
+            />
+          </div>
+        </div>
+
+        {/* Boutons en bas */}
+        <div className="col-span-1 md:col-span-2 flex justify-end gap-2 pt-4">
+          <button
+            type="button"
+            onClick={() => setShowAddModal(false)}
+            className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300"
+            aria-label="Annuler"
+          >
+            Annuler
+          </button>
+          <button
+            type="submit"
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+            aria-label="Créer la boutique"
+          >
+            Créer
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+  </div>
+
+)}
 
       <div className="bg-white rounded-lg shadow p-4 mb-6">
         <div className="flex flex-col md:flex-row gap-4 mb-4">
@@ -456,14 +486,14 @@ const Stores: React.FC = () => {
                     <td className="py-3 px-4">
                       <span
                         className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${
-                          boutique.is_approved === null
+                          boutique.is_approved == null
                             ? 'bg-yellow-100 text-yellow-600'
-                            : boutique.is_approved
+                            : boutique.is_approved 
                             ? 'bg-green-100 text-green-600'
                             : 'bg-red-100 text-red-600'
                         }`}
                       >
-                        {boutique.is_approved === null
+                        {boutique.is_approved == null
                           ? 'En attente'
                           : boutique.is_approved
                           ? 'Approuvé'
@@ -471,38 +501,38 @@ const Stores: React.FC = () => {
                       </span>
                     </td>
                     <td className="py-3 px-4">
-                      <div className="flex space-x-2">
+                      <div className="flex space-x-2 items-center">
                         <button
                           className="p-1 text-blue-500 hover:text-blue-700"
                           title="Voir"
-                          aria-label={`Voir la boutique ${boutique.nom}`}
+                          aria-label={`Voir la boutique ${boutique.nom || 'sans nom'}`}
                         >
                           <Eye size={18} />
                         </button>
                         <button
                           className="p-1 text-indigo-500 hover:text-indigo-700"
                           title="Mettre à jour"
-                          aria-label={`Mettre à jour la boutique ${boutique.nom}`}
+                          aria-label={`Mettre à jour la boutique ${boutique.nom || 'sans nom'}`}
                         >
                           <RefreshCw size={18} />
                         </button>
-                        {boutique.is_approved === null && (
+                        {boutique.is_approved == null && (
                           <>
                             <button
                               className="p-1 text-green-500 hover:text-green-700"
                               onClick={() => handleApprove(boutique.id)}
                               title="Approuver"
-                              aria-label={`Approuver la boutique ${boutique.nom}`}
+                              aria-label={`Approuver la boutique ${boutique.nom || 'sans nom'}`}
                             >
-                              <Check size={18} />
+                              <Check size={18} className="inline-block" />
                             </button>
                             <button
                               className="p-1 text-red-500 hover:text-red-700"
                               onClick={() => handleReject(boutique.id)}
                               title="Rejeter"
-                              aria-label={`Rejeter la boutique ${boutique.nom}`}
+                              aria-label={`Rejeter la boutique ${boutique.nom || 'sans nom'}`}
                             >
-                              <X size={18} />
+                              <XCircle size={18} className="inline-block" />
                             </button>
                           </>
                         )}
@@ -510,7 +540,7 @@ const Stores: React.FC = () => {
                           className="p-1 text-red-500 hover:text-red-700"
                           onClick={() => handleDelete(boutique.id)}
                           title="Supprimer"
-                          aria-label={`Supprimer la boutique ${boutique.nom}`}
+                          aria-label={`Supprimer la boutique ${boutique.nom || 'sans nom'}`}
                         >
                           <Trash2 size={18} />
                         </button>
@@ -523,7 +553,12 @@ const Stores: React.FC = () => {
         </div>
 
         {filteredBoutiques.length === 0 && (
-          <div className="text-center py-8 text-gray-500">Aucune boutique trouvée</div>
+          <div className="text-center py-8 text-gray-500">
+            Aucune boutique trouvée.{' '}
+            {boutiques.some(b => b.is_approved == null)
+              ? 'Certaines boutiques sont en attente, mais aucune ne correspond à la recherche.'
+              : 'Aucune boutique en attente d\'approbation. Essayez d\'en créer une nouvelle.'}
+          </div>
         )}
 
         {filteredBoutiques.length > 0 && (

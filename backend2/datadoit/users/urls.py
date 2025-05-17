@@ -1,7 +1,7 @@
 # yourapp/urls.py
 
 from django.urls import path
-from .views import approve_user, get_purchase_history, login_view, refuse_user, signup, update_avatar, update_profile, user_delete_view, user_detail_view, user_list_view, user_update_view
+from .views import approve_user, comment_list, get_purchase_history, login_view, refuse_user, signup, top_marchand, update_avatar, update_profile, user_delete_view, user_detail_view, user_list_view, user_update_view
 
 urlpatterns = [
     path('login/', login_view, name='login'),
@@ -17,6 +17,8 @@ urlpatterns = [
   path('auth/update-profile/', update_profile, name='update-profile'),
     path('auth/update-avatar/', update_avatar, name='update-avatar'),
     path('client/purchase-history/', get_purchase_history, name='get_purchase_history'),
+    path('top-marchand/', top_marchand, name='top-marchand'),
+    path('comments/', comment_list, name='comment-list'),
     
     
 ]

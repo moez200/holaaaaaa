@@ -113,7 +113,7 @@ MEDIA_ROOT = BASE_DIR / 'media'
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
  
-    "http://localhost:5175",
+    "http://localhost:5174",
   
 ]
 CORS_ALLOW_CREDENTIALS = True
@@ -138,10 +138,10 @@ CORS_ALLOW_HEADERS = [
 
 # Channel layers (WebSockets)
 CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'CONFIG': {
-            "hosts": [('127.0.0.1', 6379)],
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)],  # Redis server address
         },
     },
 }
@@ -192,3 +192,10 @@ LOGGING = {
         },
     },
 }
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'moezhchaichi2728@gmail.com'  # Your email address
+EMAIL_HOST_PASSWORD = 'faqa uxtz vegm forg'  # App-specific password (not your regular password)
+DEFAULT_FROM_EMAIL = 'moezhchaichi76@gmail.com'

@@ -1,3 +1,5 @@
+import calendar
+from datetime import datetime, timedelta, timezone
 import logging
 import os
 import requests
@@ -6,11 +8,16 @@ from rest_framework.decorators import api_view, permission_classes,authenticatio
 from rest_framework.response import Response
 from rest_framework import status
 from django.shortcuts import get_object_or_404
+from cart.models import Order
 from cart.serializers import BoutiqueSerializerCart, ProduitSerializerCart
 from users.models import Client, Marchand
-from .models import Boutique, CategoryBoutique, CategoryProduit, Produit, Wishlist, WishlistItem
-from .serializers import BoutiqueSerializer, BoutiqueSerializerall, CategoryBoutiqueSerializer, CategoryProduitSerializer, ProduitSerializer, WishlistItemSerializer, WishlistSerializer
+from .models import Boutique, CategoryBoutique, CategoryProduit, Produit, Rating, Wishlist, WishlistItem
+from .serializers import BoutiqueSerializer, BoutiqueSerializerall, CategoryBoutiqueSerializer, CategoryProduitSerializer, DashboardOverviewSerializer, MonthlySalesSerializer, OutOfStockSerializer, ProductsByCategorySerializer, ProduitSerializer, RatingSerializer, TopSellingProductSerializer, WishlistItemSerializer, WishlistSerializer
 from rest_framework.permissions import AllowAny 
+from django.db.models import Sum, Count
+from django.utils import timezone
+from datetime import timedelta
+
 logger = logging.getLogger(__name__)
 
 @api_view(['GET'])
@@ -564,8 +571,8 @@ def all_boutiques(request):
 @permission_classes([IsAuthenticated])
 def boutique_approve(request, pk):
     boutique = get_object_or_404(Boutique, pk=pk)
-    if boutique.is_approved is not None:
-        return Response({'error': 'Boutique is not in pending status'}, status=status.HTTP_400_BAD_REQUEST)
+    if boutique.is_approved is not False:
+        return Response({'error': 'Boutique est deja approuvé'}, status=status.HTTP_400_BAD_REQUEST)
     boutique.is_approved = True
     boutique.save()
     serializer = BoutiqueSerializer(boutique)
@@ -576,8 +583,8 @@ def boutique_approve(request, pk):
 @permission_classes([IsAuthenticated])
 def boutique_reject(request, pk):
     boutique = get_object_or_404(Boutique, pk=pk)
-    if boutique.is_approved is not None:
-        return Response({'error': 'Boutique is not in pending status'}, status=status.HTTP_400_BAD_REQUEST)
+    if boutique.is_approved is not True:
+        return Response({'error': 'Boutique est deja rejeté'}, status=status.HTTP_400_BAD_REQUEST)
     boutique.is_approved = False
     boutique.save()
     serializer = BoutiqueSerializer(boutique)
@@ -755,3 +762,182 @@ def clear_wishlist(request):
             {"error": "Wishlist not found"},
             status=status.HTTP_404_NOT_FOUND
         )
+@api_view(['POST'])
+def submit_rating(request, produit_id):
+    try:
+        # Ensure produit exists
+        produit = Produit.objects.get(id=produit_id)
+    except Produit.DoesNotExist:
+        logger.error(f"Produit avec id {produit_id} non trouvé")
+        return Response(
+            {'error': 'Produit non trouvé'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    serializer = RatingSerializer(
+        data=request.data,
+        context={'request': request, 'produit_id': produit_id}
+    )
+    try:
+        if serializer.is_valid():
+            rating = serializer.save()
+            logger.info(f"Note soumise avec succès: produit_id={produit_id}, user={request.user.nom}, value={rating.value}")
+            return Response(
+                {
+                    'success': True,
+                    'rating': produit.average_rating  # Return updated average
+                },
+                status=status.HTTP_201_CREATED
+            )
+        logger.error(f"Erreurs de validation pour la notation: {serializer.errors}")
+        return Response(
+            {'errors': serializer.errors},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    except Exception as e:
+        logger.error(f"Erreur serveur lors de la soumission de la note pour produit_id={produit_id}: {str(e)}", exc_info=True)
+        return Response(
+            {'error': 'Erreur serveur interne'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from .models import Produit
+from .serializers import ProduitSerializer  # 👈 Assure-toi que c'est importé
+from django.db.models import Avg, Count, F, ExpressionWrapper, FloatField
+
+@api_view(['GET'])
+def get_popular_products(request):
+    products = Produit.objects.annotate(
+        avg_rating=Avg('ratings__value'),
+        sales_count=Count('order_items')
+    ).filter(en_stock=True).annotate(
+        popularity_score=ExpressionWrapper(
+            0.6 * F('avg_rating') + 0.4 * F('sales_count'),
+            output_field=FloatField()
+        )
+    ).order_by('-popularity_score')[:8]
+
+    serializer = ProduitSerializer(products, many=True , context={'request': request})
+    return Response(serializer.data)
+
+@api_view(['GET'])
+def get_new_products(request):
+    try:
+        # Option 1 : Filtrer par est_nouveau
+        new_products = Produit.objects.filter(est_nouveau=True)
+
+        # Option 2 : Filtrer dynamiquement par created_at (moins de 30 jours)
+        # new_products = Produit.objects.filter(created_at__gte=timezone.now() - timedelta(days=30))
+
+        serializer = ProduitSerializer(new_products, many=True , context={'request': request} )
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response(
+            {"error": f"Erreur lors de la récupération des nouveaux produits : {str(e)}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+    
+
+
+@api_view(['GET'])
+def dashboard_overview(request, boutique_id):
+    try:
+        boutique = Boutique.objects.get(id=boutique_id)
+        # Filter orders where at least one item belongs to the boutique
+        orders = Order.objects.filter(items__produit__boutique=boutique).distinct()
+        
+        total_sales = orders.aggregate(total=Sum('total'))['total'] or 0
+        total_orders = orders.count()
+        total_products = Produit.objects.filter(boutique=boutique).count()
+        active_customers = orders.values('client').distinct().count()
+
+        data = {
+            'total_sales': total_sales,
+            'total_orders': total_orders,
+            'total_products': total_products,
+            'active_customers': active_customers
+        }
+        serializer = DashboardOverviewSerializer(data)
+        return Response(serializer.data)
+    except Boutique.DoesNotExist:
+        return Response({"error": "Boutique not found."}, status=status.HTTP_404_NOT_FOUND)
+@api_view(['GET'])
+def monthly_sales(request, boutique_id):
+    try:
+        boutique = Boutique.objects.get(id=boutique_id)
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=365)
+
+        sales_data = []
+        current_date = start_date.replace(day=1)
+        while current_date <= end_date:
+            year = current_date.year
+            month = current_date.month
+            # Get the last day of the month
+            last_day = calendar.monthrange(year, month)[1]
+            month_start = datetime(year, month, 1, tzinfo=timezone.get_current_timezone())
+            month_end = datetime(year, month, last_day, 23, 59, 59, tzinfo=timezone.get_current_timezone())
+            
+            sales = Order.objects.filter(
+                items__produit__boutique=boutique,
+                created_at__range=[month_start, month_end]
+            ).aggregate(total=Sum('total'))['total'] or 0
+            sales_data.append({
+                'month': month_start.strftime('%b %Y'),
+                'sales': sales
+            })
+            
+            # Increment to the first day of the next month
+            month += 1
+            if month > 12:
+                month = 1
+                year += 1
+            current_date = datetime(year, month, 1, tzinfo=timezone.get_current_timezone())
+
+        serializer = MonthlySalesSerializer(sales_data, many=True)
+        return Response(serializer.data)
+    except Boutique.DoesNotExist:
+        return Response({"error": "Boutique not found."}, status=status.HTTP_404_NOT_FOUND)
+
+@api_view(['GET'])
+def products_by_category(request, boutique_id):
+    try:
+        boutique = Boutique.objects.get(id=boutique_id)
+        categories = CategoryProduit.objects.filter(boutique=boutique).annotate(
+            product_count=Count('produits')
+        ).values('nom', 'product_count')
+
+        serializer = ProductsByCategorySerializer(categories, many=True)
+        return Response(serializer.data)
+    except Boutique.DoesNotExist:
+        return Response({"error": "Boutique not found."}, status=status.HTTP_404_NOT_FOUND)
+
+@api_view(['GET'])
+def top_selling_products(request, boutique_id):
+    try:
+        boutique = Boutique.objects.get(id=boutique_id)
+        top_products = Produit.objects.filter(
+            boutique=boutique
+        ).annotate(
+            total_sold=Sum('order_items__quantite')
+        ).order_by('-total_sold')[:5]
+
+        serializer = TopSellingProductSerializer(top_products, many=True)
+        return Response(serializer.data)
+    except Boutique.DoesNotExist:
+        return Response({"error": "Boutique not found."}, status=status.HTTP_404_NOT_FOUND)
+
+@api_view(['GET'])
+def out_of_stock_products(request, boutique_id):
+    try:
+        boutique = Boutique.objects.get(id=boutique_id)
+        out_of_stock_count = Produit.objects.filter(
+            boutique=boutique,
+            stock=0
+        ).count()
+
+        serializer = OutOfStockSerializer({'out_of_stock_count': out_of_stock_count})
+        return Response(serializer.data)
+    except Boutique.DoesNotExist:
+        return Response({"error": "Boutique not found."}, status=status.HTTP_404_NOT_FOUND)
