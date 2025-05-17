@@ -1,10 +1,25 @@
-venv/
-.env/
-
-media/
-
-# Ignore Python bytecode files and cache directories
+# Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*.sqlite3
+
+# Django
+db.sqlite3
+/media/
+/staticfiles/
+
+# Environment
+.env
+*.env
+
+# VSCode
+.vscode/
+
+# Virtual env
+venv/
+ENV/
+env/
+
+# macOS / Windows
+.DS_Store
+Thumbs.db
